@@ -2,14 +2,23 @@ import express from 'express'
 import exitHook from 'async-exit-hook'
 import { connectDB, disconnectDB } from './config/mongodb.js'
 import { env } from './config/environtment.js'
+import { APIs_V1 } from './routes/v1/index.js'
+import cors from 'cors' // Import cors
 //import cookieParser from 'cookie-parser'
 
 const START_SERVER = () => {
   const app = express()
 
   // Parse body và cookie
+  const corsOptions = {
+    origin: 'http://localhost:5173', // Cho phép từ địa chỉ front-end (localhost:5173)
+    credentials: true // Cho phép gửi cookie qua CORS nếu cần
+  }
+
+  app.use(cors(corsOptions))
   app.use(express.json())
-  //app.use(cookieParser())
+
+  app.use('/v1', APIs_V1)
 
   // Khởi động server
   app.listen(env.APP_PORT, env.APP_HOST, () => {

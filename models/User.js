@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const collectionSchema = new mongoose.Schema({
   _id: String,
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   displayName: String,
-  userName: { type: String, required: true, unique: true },
+  userName: { type: String, unique: true },
   details: {
     phoneNumber: String,
     address: String,
@@ -45,4 +45,6 @@ const userSchema = new mongoose.Schema({
   _destroy: Date
 })
 
-module.exports = mongoose.model('User', userSchema)
+const User = mongoose.model('User', userSchema)
+
+export default User
