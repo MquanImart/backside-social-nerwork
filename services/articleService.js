@@ -37,7 +37,7 @@ const createArticleService = async ({
 
 // Service lấy tất cả các bài viết với bình luận
 const getAllArticlesWithCommentsService = async () => {
-  return await Article.find()
+  const articles = await Article.find()
     .populate({
       path: 'idHandler',
       select: 'firstName lastName displayName avt'
@@ -63,6 +63,25 @@ const getAllArticlesWithCommentsService = async () => {
       model: 'User'
     })
     .sort({ createdAt: -1 })
+
+  // Hàm tính tổng số bình luận và phản hồi
+  const calculateTotalComments = (comments) => {
+    let totalComments = comments.length // Bắt đầu từ số lượng bình luận chính
+    comments.forEach((comment) => {
+      if (comment.replyComment && comment.replyComment.length > 0) {
+        totalComments += calculateTotalComments(comment.replyComment) // Cộng số lượng phản hồi của bình luận đó
+      }
+    })
+    return totalComments
+  }
+
+  // Thêm thuộc tính `totalComments` cho từng bài viết
+  const articlesWithCommentCount = articles.map((article) => {
+    const totalComments = calculateTotalComments(article.interact.comment || [])
+    return { ...article.toObject(), totalComments } // `toObject()` để chuyển đổi Mongoose Document thành plain object
+  })
+
+  return articlesWithCommentCount
 }
 
 // Service xóa bài viết
@@ -135,10 +154,41 @@ const addReplyToCommentService = async ({
   return savedReply
 }
 
+const likeArticleService = async (postId, userId) => {
+  const article = await Article.findById(postId)
+  if (!article) {
+    throw new Error('Bài viết không tồn tại')
+  }
+
+  // Kiểm tra xem người dùng đã like chưa
+  const likedIndex = article.interact.emoticons.findIndex(
+    (emoticon) =>
+      emoticon._iduser.toString() === userId &&
+      emoticon.typeEmoticons === 'like'
+  )
+
+  if (likedIndex > -1) {
+    // Nếu đã like, xóa dữ liệu của userId trong danh sách emoticons
+    article.interact.emoticons.splice(likedIndex, 1)
+    await article.save()
+    return { message: 'Đã hủy thích bài viết', article }
+  } else {
+    // Nếu chưa like, thêm dữ liệu mới vào danh sách emoticons
+    article.interact.emoticons.push({
+      _iduser: userId,
+      typeEmoticons: 'like',
+      createdAt: new Date()
+    })
+    await article.save()
+    return { message: 'Đã thích bài viết', article }
+  }
+}
+
 export const articleService = {
   createArticleService,
   getAllArticlesWithCommentsService,
   deleteArticleService,
   addCommentToArticleService,
-  addReplyToCommentService
+  addReplyToCommentService,
+  likeArticleService
 }

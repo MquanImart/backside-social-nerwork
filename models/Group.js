@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const groupSchema = new mongoose.Schema({
   warningLevel: { type: Number, enum: [0, 1, 2, 3], default: 0 },
@@ -43,4 +43,6 @@ const groupSchema = new mongoose.Schema({
   _destroy: Date
 })
 
-module.exports = mongoose.model('Group', groupSchema)
+const Group = mongoose.model('Group', groupSchema)
+
+export default Group

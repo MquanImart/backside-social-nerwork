@@ -6,7 +6,6 @@ import { env } from '../config/environtment.js'
 export const registerService = async ({
   firstName,
   lastName,
-  userName,
   email,
   password,
   confirmPassword
@@ -19,12 +18,6 @@ export const registerService = async ({
   let user = await User.findOne({ 'account.email': email })
   if (user) {
     throw new Error('Email đã tồn tại')
-  }
-
-  // Kiểm tra xem userName đã tồn tại chưa
-  user = await User.findOne({ userName })
-  if (user) {
-    throw new Error('Tên người dùng đã tồn tại')
   }
 
   // Tạo người dùng mới

@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   displayName: String,
-  userName: { type: String, unique: true },
+  userName: { type: String, unique: true, default: '' },
   details: {
     phoneNumber: String,
     address: String,

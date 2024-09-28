@@ -17,5 +17,6 @@ Router.post(
   '/:postId/comments/:commentId/reply',
   articleController.addReplyToComment
 )
+Router.post('/:postId/like', articleController.likeArticle)
 
 export const articleRoute = Router
