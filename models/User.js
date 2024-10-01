@@ -10,7 +10,7 @@ const collectionSchema = new mongoose.Schema({
 })
 
 const friendSchema = new mongoose.Schema({
-  userId: String,
+  idUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Thêm idUser vào cấu trúc sub-document
   addDate: { type: Date, default: Date.now }
 })
 

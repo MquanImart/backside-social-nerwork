@@ -9,6 +9,7 @@ const upload = multer({ storage })
 
 const Router = express.Router()
 
+Router.get('/:postId', articleController.getArticleById)
 Router.post('/', upload.array('images'), articleController.createArticle)
 Router.get('/', articleController.getAllArticlesWithComments)
 Router.delete('/:id', articleController.deleteArticle)
@@ -18,5 +19,14 @@ Router.post(
   articleController.addReplyToComment
 )
 Router.post('/:postId/like', articleController.likeArticle)
+Router.post('/:postId/report', articleController.reportArticle)
+Router.post('/:postId/save', articleController.saveArticle)
+Router.put('/:postId/edit', articleController.editArticle)
+Router.post('/:postId/comments/:commentId/like', articleController.likeComment)
+Router.post(
+  '/:postId/comments/:commentId/reply/:replyId/like',
+  articleController.likeReplyComment
+)
+Router.post('/:postId/share', articleController.shareArticle)
 
 export const articleRoute = Router

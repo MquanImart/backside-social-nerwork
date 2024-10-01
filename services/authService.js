@@ -2,7 +2,6 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { env } from '../config/environtment.js'
 
-// Service đăng ký người dùng mới
 export const registerService = async ({
   firstName,
   lastName,
@@ -20,11 +19,13 @@ export const registerService = async ({
     throw new Error('Email đã tồn tại')
   }
 
-  // Tạo người dùng mới
+  // Tạo người dùng mới và gán `displayName` và `userName` mặc định
   user = new User({
     account: { email, password },
     firstName,
-    lastName
+    lastName,
+    displayName: `${firstName} ${lastName}`, // Gán displayName mặc định
+    userName: email // Sử dụng email làm userName
   })
 
   await user.save()

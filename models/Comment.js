@@ -8,7 +8,7 @@ const commentSchema = new mongoose.Schema({
   },
   content: { type: String, required: true },
   img: [String],
-  replyComment: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }], // Tham chiếu đến Comment (phản hồi)
+  replyComment: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }],
   emoticons: [
     {
       typeEmoticons: String,

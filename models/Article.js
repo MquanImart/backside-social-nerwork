@@ -37,7 +37,11 @@ const articleSchema = new mongoose.Schema({
   content: { type: String, required: true },
   hashTag: [String],
   listPhoto: [String],
-  scope: { type: String, default: 'public' },
+  scope: {
+    type: String,
+    default: 'public',
+    enum: ['public', 'friends', 'private']
+  },
   interact: {
     emoticons: [
       {
@@ -45,7 +49,7 @@ const articleSchema = new mongoose.Schema({
         _iduser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
       }
     ],
-    comment: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }] // Tham chiếu đến Comment
+    comment: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }]
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
