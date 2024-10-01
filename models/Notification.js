@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const notificationSchema = new mongoose.Schema({
   senderId: {
@@ -18,4 +18,6 @@ const notificationSchema = new mongoose.Schema({
   _destroy: Date
 })
 
-module.exports = mongoose.model('Notification', notificationSchema)
+const Notification = mongoose.model('Notification', notificationSchema)
+
+export default Notification

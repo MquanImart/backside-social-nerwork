@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const myPhotoSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -14,4 +14,6 @@ const myPhotoSchema = new mongoose.Schema({
   _destroy: Date
 })
 
-module.exports = mongoose.model('MyPhoto', myPhotoSchema)
+const MyPhoto = mongoose.model('MyPhoto', myPhotoSchema)
+
+export default MyPhoto

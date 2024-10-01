@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const addFriendsSchema = new mongoose.Schema({
   senderId: {
@@ -20,4 +20,6 @@ const addFriendsSchema = new mongoose.Schema({
   acceptedAt: Date
 })
 
-module.exports = mongoose.model('AddFriends', addFriendsSchema)
+const AddFriends = mongoose.model('AddFriends', addFriendsSchema)
+
+export default AddFriends
