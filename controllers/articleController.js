@@ -291,6 +291,21 @@ const shareArticle = async (req, res) => {
     })
   }
 }
+const getAllArticlesOfUser = async (req, res) => {
+  try {
+    const userId = req.params.userId || req.user._id // Lấy userId từ params hoặc xác thực
+    if (!userId) {
+      return res.status(400).json({ message: 'Thiếu userId' })
+    }
+
+    // Gọi service để lấy tất cả bài viết của người dùng
+    const articles = await articleService.getAllArticlesByUserService(userId)
+    res.status(200).json(articles)
+  } catch (error) {
+    console.error('Lỗi khi lấy tất cả bài viết của người dùng:', error)
+    res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
 
 export const articleController = {
   getArticleById,
@@ -305,5 +320,6 @@ export const articleController = {
   editArticle,
   likeComment,
   likeReplyComment,
-  shareArticle
+  shareArticle,
+  getAllArticlesOfUser
 }

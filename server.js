@@ -1,5 +1,6 @@
 import express from 'express'
 import exitHook from 'async-exit-hook'
+import bodyParser from 'body-parser'
 import { connectDB, disconnectDB } from './config/mongodb.js'
 import { env } from './config/environtment.js'
 import { APIs_V1 } from './routes/v1/index.js'
@@ -14,6 +15,8 @@ const START_SERVER = () => {
     origin: 'http://localhost:5173', // Cho phép từ địa chỉ front-end (localhost:5173)
     credentials: true // Cho phép gửi cookie qua CORS nếu cần
   }
+  app.use(bodyParser.json({ limit: '50mb' })) // Tăng giới hạn cho JSON
+  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true })) // Tăng giới hạn cho URL encoded
 
   app.use(cors(corsOptions))
   app.use(express.json())

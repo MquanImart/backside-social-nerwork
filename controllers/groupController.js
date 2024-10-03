@@ -1,0 +1,268 @@
+// controllers/groupController.js
+import { groupService } from '../services/groupServices.js'
+
+const getUserGroups = async (req, res) => {
+  try {
+    const userId = req.params.userId
+
+    // Gọi service để lấy danh sách nhóm mà người dùng đã tham gia
+    const userGroups = await groupService.getUserGroupsService(userId)
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${userGroups.length} nhóm`,
+      groups: userGroups
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách nhóm của người dùng:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const getGroupArticles = async (req, res) => {
+  try {
+    const userId = req.params.userId
+
+    // Gọi service để lấy danh sách bài viết của các nhóm mà người dùng đã tham gia
+    const articles = await groupService.getGroupArticlesService(userId)
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${articles.length} bài viết`,
+      articles
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy bài viết của nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const getNotJoinedGroups = async (req, res) => {
+  try {
+    const userId = req.params.userId
+    const groups = await groupService.getNotJoinedGroupsService(userId)
+    return res.status(200).json({ groups })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const createGroup = async (req, res) => {
+  try {
+    // Lấy thông tin nhóm từ request body
+    const {
+      groupName,
+      type,
+      idAdmin,
+      introduction,
+      avt,
+      backGround,
+      hobbies,
+      rule
+    } = req.body
+
+    // Kiểm tra các thông tin cần thiết
+    if (!groupName || !type || !idAdmin) {
+      return res
+        .status(400)
+        .json({ message: 'Vui lòng điền đầy đủ thông tin cần thiết.' })
+    }
+
+    // Gọi service để tạo nhóm
+    const newGroup = await groupService.createGroupService({
+      groupName,
+      type,
+      idAdmin,
+      introduction,
+      avt,
+      backGround,
+      hobbies,
+      rule
+    })
+
+    // Trả về nhóm vừa được tạo
+    return res
+      .status(201)
+      .json({ message: 'Nhóm được tạo thành công!', group: newGroup })
+  } catch (error) {
+    console.error('Lỗi khi tạo nhóm:', error.message)
+    return res
+      .status(500)
+      .json({ message: 'Có lỗi xảy ra khi tạo nhóm.', error: error.message })
+  }
+}
+
+// Controller để thêm một quản trị viên mới vào nhóm
+const addAdministrator = async (req, res) => {
+  try {
+    const { groupId, newAdminId } = req.body
+
+    if (!groupId || !newAdminId) {
+      return res
+        .status(400)
+        .json({ message: 'Vui lòng cung cấp ID nhóm và ID quản trị viên mới.' })
+    }
+
+    // Gọi service để thêm quản trị viên mới
+    const updatedGroup = await groupService.addAdministratorService(
+      groupId,
+      newAdminId
+    )
+
+    return res.status(200).json({
+      message: 'Quản trị viên mới đã được thêm thành công!',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Lỗi khi thêm quản trị viên:', error.message)
+    return res.status(500).json({
+      message: 'Có lỗi xảy ra khi thêm quản trị viên.',
+      error: error.message
+    })
+  }
+}
+const getProcessedArticles = async (req, res) => {
+  try {
+    const groupId = req.params.groupId // Lấy groupId từ URL
+
+    // Gọi service để lấy danh sách bài viết của nhóm với trạng thái "approved"
+    const articles = await groupService.getProcessedArticlesService(groupId)
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${articles.length} bài viết đã được duyệt.`,
+      articles
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy bài viết của nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const createGroupArticle = async (req, res) => {
+  try {
+    console.log('Body Request:', req.body) // Kiểm tra đầu vào của `req.body`
+
+    const { content, userId, groupId, scope, hashTag } = req.body
+
+    if (!content || !userId || !groupId) {
+      return res.status(400).json({
+        message:
+          'Thiếu thông tin bài viết hoặc người tạo bài viết. Vui lòng kiểm tra lại dữ liệu đầu vào.'
+      })
+    }
+
+    const images = req.files ? req.files.map((file) => file.path) : []
+
+    const newArticle = await groupService.createArticleService({
+      content,
+      userId,
+      groupId,
+      scope,
+      state: 'pending',
+      hashTag,
+      images
+    })
+
+    return res.status(201).json({
+      message: 'Bài viết đã được tạo với trạng thái "pending"!',
+      post: newArticle
+    })
+  } catch (error) {
+    console.error('Lỗi khi tạo bài viết:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const getPendingArticles = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const pendingArticles = await groupService.getPendingArticlesService(
+      groupId
+    )
+    return res.status(200).json({ articles: pendingArticles })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách bài viết chờ duyệt:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+// Duyệt bài viết
+const processedGroupArticle = async (req, res) => {
+  try {
+    const { groupId, articleId } = req.params
+    const { userId } = req.body // Lấy userId từ body request để xác thực quyền duyệt
+
+    // Kiểm tra quyền duyệt bài viết của user trong nhóm (ví dụ: chỉ admin hoặc moderator được duyệt)
+    const hasPermission = await groupService.checkUserPermission(
+      userId,
+      groupId
+    )
+    if (!hasPermission) {
+      return res
+        .status(403)
+        .json({ message: 'Người dùng không có quyền duyệt bài viết này.' })
+    }
+
+    // Duyệt bài viết và cập nhật trạng thái
+    const approvedArticle = await groupService.updateArticleStateService(
+      groupId,
+      articleId,
+      'processed'
+    )
+
+    return res.status(200).json({
+      message: 'Bài viết đã được duyệt thành công!',
+      article: approvedArticle
+    })
+  } catch (error) {
+    console.error('Lỗi khi duyệt bài viết:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+// Từ chối bài viết
+const rejectGroupArticle = async (req, res) => {
+  try {
+    const { groupId, articleId } = req.params
+    const { userId } = req.body // Lấy userId từ body của request
+
+    // Kiểm tra quyền duyệt bài viết của user trong nhóm (ví dụ: chỉ admin hoặc moderator được duyệt)
+    const hasPermission = await groupService.checkUserPermission(
+      userId,
+      groupId
+    )
+    if (!hasPermission) {
+      return res
+        .status(403)
+        .json({ message: 'Người dùng không có quyền duyệt bài viết này.' })
+    }
+
+    // Gọi service để từ chối bài viết
+    const rejectedArticle = await groupService.updateArticleStateService(
+      groupId,
+      articleId,
+      'rejected'
+    )
+    return res
+      .status(200)
+      .json({ message: 'Bài viết đã bị từ chối!', article: rejectedArticle })
+  } catch (error) {
+    console.error('Lỗi khi từ chối bài viết:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+export const groupController = {
+  getUserGroups,
+  getGroupArticles,
+  createGroup,
+  addAdministrator,
+  getNotJoinedGroups,
+  getProcessedArticles,
+  createGroupArticle,
+  getPendingArticles,
+  processedGroupArticle,
+  rejectGroupArticle
+}

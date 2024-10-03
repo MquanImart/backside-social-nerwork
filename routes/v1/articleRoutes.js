@@ -28,5 +28,6 @@ Router.post(
   articleController.likeReplyComment
 )
 Router.post('/:postId/share', articleController.shareArticle)
+Router.get('/user/:userId/articles', articleController.getAllArticlesOfUser) // Lấy tất cả bài viết của người dùng
 
 export const articleRoute = Router

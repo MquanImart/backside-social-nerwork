@@ -103,7 +103,7 @@ const getAllArticlesWithCommentsService = async (userId) => {
     // Lấy tất cả nhóm mà người dùng đã tham gia
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
-      'members.listUsers.state': 'approved'
+      'members.listUsers.state': 'processed'
     })
 
     console.log('Danh sách nhóm đã tham gia:', groups)
@@ -124,7 +124,7 @@ const getAllArticlesWithCommentsService = async (userId) => {
         // Điều kiện 2: Bài viết thuộc nhóm mà người dùng đã tham gia và đã được duyệt
         {
           groupID: { $in: groupIds },
-          state: 'approved'
+          state: 'processed'
         },
         // Điều kiện 3: Bài viết của chính bản thân người dùng
         {
@@ -228,11 +228,19 @@ const addCommentToArticleService = async ({
   _iduser,
   img = []
 }) => {
-  // Tạo bình luận mới
+  // Tìm thông tin người dùng để lấy `displayName`
+  const user = await User.findById(_iduser).select('displayName avt') // Chỉ lấy `displayName` và `avt`
+  if (!user) {
+    throw new Error('Người dùng không tồn tại')
+  }
+
+  // Tạo bình luận mới với thông tin người dùng
   const newComment = new Comment({
     _iduser,
     content,
     img,
+    displayName: user.displayName, // Thêm `displayName` vào comment
+    userAvatar: user.avt, // Thêm `userAvatar` vào comment nếu cần
     createdAt: new Date(),
     updatedAt: new Date()
   })
@@ -241,15 +249,17 @@ const addCommentToArticleService = async ({
   const savedComment = await newComment.save()
 
   // Tìm bài viết và thêm bình luận vào danh sách comment
-  const article = await Article.findById(postId)
+  const article = await Article.findById(postId).populate('interact.comment')
   if (!article) throw new Error('Bài viết không tồn tại')
 
   // Thêm comment vào bài viết
   article.interact.comment.push(savedComment._id)
   article.updatedAt = new Date()
 
+  // Lưu bài viết đã cập nhật
   await article.save()
 
+  // Trả về comment đã lưu kèm thông tin `displayName` và `avt` của user
   return savedComment
 }
 
@@ -513,6 +523,37 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
   }
 }
 
+const getAllArticlesByUserService = async (userId) => {
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error('ID người dùng không hợp lệ.')
+  }
+
+  const articles = await Article.find({ createdBy: userId })
+    .populate('createdBy', 'firstName lastName displayName avt')
+    .populate('interact.comment')
+    .exec()
+
+  const calculateTotalComments = (comments) => {
+    if (!comments) return 0
+    let totalComments = comments.length
+    comments.forEach((comment) => {
+      if (comment.replyComment && comment.replyComment.length > 0) {
+        totalComments += calculateTotalComments(comment.replyComment)
+      }
+    })
+    return totalComments
+  }
+
+  // Thêm thuộc tính `totalComments` cho từng bài viết
+  const articlesWithCommentCount = articles.map((article) => {
+    if (!article) return null
+    const totalComments = calculateTotalComments(article.interact.comment || [])
+    return { ...article.toObject(), totalComments }
+  })
+
+  return articlesWithCommentCount // Trả về danh sách bài viết
+}
+
 export const articleService = {
   getArticleByIdService,
   createArticleService,
@@ -526,5 +567,6 @@ export const articleService = {
   editArticleService,
   likeCommentService,
   likeReplyCommentService,
-  shareArticleService
+  shareArticleService,
+  getAllArticlesByUserService
 }

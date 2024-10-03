@@ -26,7 +26,11 @@ const groupSchema = new mongoose.Schema({
     listArticle: [
       {
         idArticle: { type: mongoose.Schema.Types.ObjectId, ref: 'Article' },
-        state: String
+        state: {
+          type: String,
+          enum: ['pending', 'processed', 'rejected'],
+          default: 'pending'
+        }
       }
     ]
   },
@@ -39,7 +43,7 @@ const groupSchema = new mongoose.Schema({
   ],
   hobbies: [String],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+  updatedAt: Date,
   _destroy: Date
 })
 
