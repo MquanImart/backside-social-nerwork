@@ -5,7 +5,7 @@ const collectionSchema = new mongoose.Schema({
   name: String,
   items: [String],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+  updatedAt: Date,
   _destroy: Date
 })
 
@@ -37,11 +37,10 @@ const userSchema = new mongoose.Schema({
   groups: [String],
   backGround: [String],
   aboutMe: String,
-  createDate: { type: Date, default: Date.now },
   hobbies: [String],
   listArticle: [String],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+  updatedAt: Date,
   _destroy: Date
 })
 
