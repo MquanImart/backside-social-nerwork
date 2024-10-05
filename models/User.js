@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 
 const collectionSchema = new mongoose.Schema({
   _id: String,
-  name: String,
+  name: { type: String, required: true },
   items: [String],
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
