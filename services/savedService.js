@@ -27,9 +27,9 @@ const createCollectionService = async (userId, name) => {
 }
 
 // Service để chỉnh sửa bộ sưu tập
-const editCollectionService = async (userId, collectionName, newName) => {
-  if (!userId || !collectionName || !newName) {
-    throw new Error('User ID, Collection Name và tên mới là bắt buộc')
+const editCollectionService = async (userId, collectionId, newName) => {
+  if (!userId || !collectionId || !newName) {
+    throw new Error('User ID, Collection ID và tên mới là bắt buộc')
   }
 
   const user = await User.findOne({ _id: userId })
@@ -38,7 +38,7 @@ const editCollectionService = async (userId, collectionName, newName) => {
   }
 
   const collectionIndex = user.collections.findIndex(
-    (col) => col.name === collectionName
+    (col) => col._id.toString() === collectionId // Sử dụng _id để tìm kiếm
   )
 
   if (collectionIndex === -1) {
@@ -46,12 +46,13 @@ const editCollectionService = async (userId, collectionName, newName) => {
   }
 
   // Kiểm tra tên bộ sưu tập
-  if (collectionName === 'Tất cả mục đã lưu') {
+  if (user.collections[collectionIndex].name === 'Tất cả mục đã lưu') {
     throw new Error(
       'Không thể chỉnh sửa bộ sưu tập mặc định "Tất cả mục đã lưu"'
     )
   }
 
+  // Cập nhật tên bộ sưu tập và thời gian cập nhật
   user.collections[collectionIndex].name = newName
   user.collections[collectionIndex].updatedAt = new Date()
   await user.save()
@@ -60,9 +61,9 @@ const editCollectionService = async (userId, collectionName, newName) => {
 }
 
 // Service để xóa bộ sưu tập
-const deleteCollectionService = async (userId, collectionName) => {
-  if (!userId || !collectionName) {
-    throw new Error('User ID và Collection Name là bắt buộc')
+const deleteCollectionService = async (userId, collectionId) => {
+  if (!userId || !collectionId) {
+    throw new Error('User ID và Collection ID là bắt buộc')
   }
 
   const user = await User.findOne({ _id: userId })
@@ -71,15 +72,16 @@ const deleteCollectionService = async (userId, collectionName) => {
   }
 
   const collectionIndex = user.collections.findIndex(
-    (col) => col.name === collectionName
+    (col) => col._id.toString() === collectionId // Sử dụng ID để tìm kiếm
   )
 
   if (collectionIndex === -1) {
+    console.log('Danh sách bộ sưu tập:', user.collections) // Log để kiểm tra
     throw new Error('Bộ sưu tập không tồn tại')
   }
 
   // Kiểm tra tên bộ sưu tập
-  if (collectionName === 'Tất cả mục đã lưu') {
+  if (user.collections[collectionIndex].name === 'Tất cả mục đã lưu') {
     throw new Error('Không thể xóa bộ sưu tập mặc định "Tất cả mục đã lưu"')
   }
 

@@ -254,6 +254,140 @@ const rejectGroupArticle = async (req, res) => {
   }
 }
 
+const getGroupMembers = async (req, res) => {
+  try {
+    const groupId = req.params.groupId
+
+    // Gọi service để lấy danh sách thành viên của nhóm
+    const members = await groupService.getGroupMembersService(groupId)
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${members.length} thành viên của nhóm.`,
+      members
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách thành viên của nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const removeMember = async (req, res) => {
+  try {
+    const { groupId, memberId } = req.params
+
+    // Gọi service để xóa thành viên khỏi nhóm
+    const updatedGroup = await groupService.removeMemberService(
+      groupId,
+      memberId
+    )
+
+    return res.status(200).json({
+      message: 'Thành viên đã được xóa khỏi nhóm thành công!',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Lỗi khi xóa thành viên:', error.message)
+    return res.status(400).json({ message: error.message }) // Trả về lỗi với mã 400
+  }
+}
+
+// Controller để cập nhật quy định nhóm
+const updateGroupRules = async (req, res) => {
+  try {
+    const groupId = req.params.groupId // Lấy groupId từ URL
+    const { rules, userId } = req.body // Lấy danh sách quy định mới từ body request
+
+    // Lấy userId từ req.user (đã xác thực)
+    if (!userId) {
+      return res.status(403).json({ message: 'Người dùng không hợp lệ.' })
+    }
+
+    // Gọi service để cập nhật quy định
+    const updatedGroup = await groupService.updateGroupRulesService(
+      groupId,
+      rules,
+      userId
+    )
+
+    return res.status(200).json({
+      message: 'Cập nhật quy định nhóm thành công!',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Lỗi khi cập nhật quy định nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const addAdmin = async (req, res) => {
+  try {
+    const { groupId } = req.params // Nhận groupId từ params
+    const userId = req.body.userId // Nhận userId từ body
+    const adminId = req.body.adminId // Nhận adminId từ body
+
+    const updatedGroup = await groupService.addAdministrator(
+      groupId,
+      userId,
+      adminId
+    )
+    return res.status(200).json({
+      message: 'Quản trị viên đã được thêm thành công',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Error adding administrator:', error)
+    return res.status(500).json({
+      message: 'Lỗi khi thêm quản trị viên',
+      error: error.message
+    })
+  }
+}
+
+const getRequests = async (req, res) => {
+  try {
+    const groupId = req.params.groupId // Lấy groupId từ params
+
+    // Gọi service để lấy danh sách yêu cầu tham gia nhóm
+    const requests = await groupService.getRequestsService(groupId)
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${requests.length} yêu cầu tham gia nhóm.`,
+      requests
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy yêu cầu tham gia nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+// Hàm chấp nhận lời mời tham gia nhóm
+const acceptInvite = async (req, res) => {
+  const { groupId } = req.params
+  const { userId } = req.body // userId được truyền từ body
+
+  try {
+    const result = await groupService.acceptInviteService(groupId, userId)
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi khi chấp nhận lời mời:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+// Hàm từ chối lời mời tham gia nhóm
+const rejectInvite = async (req, res) => {
+  const { groupId } = req.params
+  const { userId } = req.body // userId được truyền từ body
+
+  try {
+    const result = await groupService.rejectInviteService(groupId, userId)
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi khi từ chối lời mời:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
 export const groupController = {
   getUserGroups,
   getGroupArticles,
@@ -264,5 +398,12 @@ export const groupController = {
   createGroupArticle,
   getPendingArticles,
   processedGroupArticle,
-  rejectGroupArticle
+  rejectGroupArticle,
+  getGroupMembers,
+  removeMember,
+  updateGroupRules,
+  addAdmin,
+  getRequests,
+  acceptInvite,
+  rejectInvite
 }

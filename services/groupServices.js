@@ -270,6 +270,222 @@ const checkUserPermission = async (userId, groupId) => {
   }
 }
 
+const getGroupMembersService = async (groupId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) {
+    throw new Error('ID nhóm không hợp lệ.')
+  }
+
+  // Tìm nhóm dựa trên groupId
+  const group = await Group.findById(groupId)
+    .populate('members.listUsers.idUser', 'firstName lastName displayName avt') // Lấy thông tin người dùng
+    .select('members') // Chỉ lấy trường members
+
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Lọc ra danh sách thành viên có trạng thái accepted
+  const acceptedMembers = group.members.listUsers.filter(
+    (member) => member.state === 'accepted'
+  )
+
+  return acceptedMembers // Trả về danh sách thành viên đã chấp nhận
+}
+
+const removeMemberService = async (groupId, memberId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) {
+    throw new Error('ID nhóm không hợp lệ.')
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(memberId)) {
+    throw new Error('ID thành viên không hợp lệ.')
+  }
+
+  // Tìm nhóm để kiểm tra người tạo
+  const group = await Group.findById(groupId)
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Kiểm tra nếu memberId là người tạo nhóm (idAdmin)
+  if (group.idAdmin.toString() === memberId) {
+    throw new Error('Không thể xóa người tạo nhóm.') // Không cho phép xóa người tạo nhóm
+  }
+
+  // Cập nhật nhóm để xóa thành viên
+  const updatedGroup = await Group.findByIdAndUpdate(
+    groupId,
+    { $pull: { 'members.listUsers': { idUser: memberId } } },
+    { new: true }
+  )
+
+  if (!updatedGroup) {
+    throw new Error('Không tìm thấy nhóm để cập nhật.')
+  }
+
+  return updatedGroup
+}
+const updateGroupRulesService = async (groupId, rules, userId) => {
+  // Tìm nhóm theo groupId
+  const group = await Group.findById(groupId)
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Kiểm tra quyền của người dùng
+  if (group.idAdmin.toString() !== userId) {
+    throw new Error('Bạn không có quyền cập nhật quy định này.')
+  }
+
+  // Cập nhật quy định nhóm
+  group.rule = rules // Cập nhật quy định
+  await group.save()
+
+  return group
+}
+// Thêm quản trị viên
+const addAdministrator = async (groupId, userId, adminId) => {
+  const group = await Group.findById(groupId)
+
+  if (!group) {
+    throw new Error('Nhóm không tồn tại')
+  }
+
+  // Kiểm tra nếu người dùng là quản trị viên hoặc người tạo nhóm
+  const isAdmin = group.Administrators.some(
+    (admin) => admin.idUser.toString() === userId
+  )
+  const isOwner = group.idAdmin.toString() === userId
+
+  if (!isAdmin && !isOwner) {
+    throw new Error('Người dùng không có quyền thêm quản trị viên')
+  }
+
+  // Kiểm tra xem người dùng được thêm đã là quản trị viên chưa
+  const alreadyAdmin = group.Administrators.some(
+    (admin) => admin.idUser.toString() === adminId
+  )
+  if (alreadyAdmin) {
+    throw new Error('Người dùng đã là quản trị viên')
+  }
+
+  // Thêm quản trị viên vào nhóm
+  group.Administrators.push({
+    idUser: adminId,
+    state: 'accepted', // Có thể thay đổi theo logic của bạn
+    joinDate: new Date()
+  })
+
+  // Cập nhật nhóm
+  await group.save()
+  return group
+}
+
+const getRequestsService = async (groupId) => {
+  // Kiểm tra xem groupId có hợp lệ không
+  if (!mongoose.Types.ObjectId.isValid(groupId)) {
+    throw new Error('ID nhóm không hợp lệ.')
+  }
+
+  // Tìm nhóm dựa trên groupId và lấy danh sách người dùng
+  const group = await Group.findById(groupId)
+    .populate(
+      'members.listUsers.idUser',
+      'displayName email avt account.email hobbies'
+    ) // Lấy thông tin người dùng
+    .select('members.listUsers') // Chỉ lấy trường members
+
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Lọc ra danh sách người dùng có trạng thái pending
+  const requests = group.members.listUsers.filter(
+    (user) => user.state === 'pending'
+  )
+
+  return requests // Trả về danh sách yêu cầu tham gia nhóm
+}
+
+// Hàm chấp nhận lời mời tham gia nhóm
+const acceptInviteService = async (groupId, userId) => {
+  // Kiểm tra xem userId và groupId có hợp lệ không
+  if (
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !mongoose.Types.ObjectId.isValid(groupId)
+  ) {
+    throw new Error('ID không hợp lệ.')
+  }
+
+  // Tìm nhóm dựa trên groupId
+  const group = await Group.findById(groupId)
+
+  // Kiểm tra nếu không tìm thấy nhóm
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Tìm thành viên trong danh sách thành viên với trạng thái là 'pending'
+  const memberIndex = group.members.listUsers.findIndex(
+    (member) =>
+      member.idUser.toString() === userId && member.state === 'pending'
+  )
+
+  // Kiểm tra nếu không tìm thấy thành viên đang chờ
+  if (memberIndex === -1) {
+    throw new Error('Không tìm thấy lời mời cho người dùng này.')
+  }
+
+  // Cập nhật trạng thái thành viên thành 'accepted'
+  group.members.listUsers[memberIndex].state = 'accepted'
+  await group.save() // Lưu thay đổi
+
+  // Trả về thông tin thành viên đã cập nhật
+  return {
+    message: 'Chấp nhận lời mời thành công.',
+    member: group.members.listUsers[memberIndex]
+  }
+}
+
+// Hàm từ chối lời mời tham gia nhóm
+const rejectInviteService = async (groupId, userId) => {
+  // Kiểm tra xem userId và groupId có hợp lệ không
+  if (
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !mongoose.Types.ObjectId.isValid(groupId)
+  ) {
+    throw new Error('ID không hợp lệ.')
+  }
+
+  // Tìm nhóm dựa trên groupId
+  const group = await Group.findById(groupId)
+
+  // Kiểm tra nếu không tìm thấy nhóm
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Kiểm tra xem người dùng đã có trong danh sách lời mời chưa
+  const inviteIndex = group.members.listUsers.findIndex(
+    (member) =>
+      member.idUser.toString() === userId && member.state === 'pending'
+  )
+
+  // Kiểm tra nếu không tìm thấy lời mời
+  if (inviteIndex === -1) {
+    throw new Error('Không tìm thấy lời mời cho người dùng này.')
+  }
+
+  // Xóa lời mời
+  group.members.listUsers.splice(inviteIndex, 1)
+  await group.save() // Lưu thay đổi
+
+  return {
+    message: 'Đã từ chối yêu cầu tham gia nhóm thành công.',
+    userId: userId
+  }
+}
+
 export const groupService = {
   getUserGroupsService,
   getGroupArticlesService,
@@ -280,5 +496,12 @@ export const groupService = {
   createArticleService,
   getPendingArticlesService,
   updateArticleStateService,
-  checkUserPermission
+  checkUserPermission,
+  getGroupMembersService,
+  removeMemberService,
+  updateGroupRulesService,
+  addAdministrator,
+  getRequestsService,
+  acceptInviteService,
+  rejectInviteService
 }
