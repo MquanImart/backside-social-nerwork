@@ -10,6 +10,7 @@ const upload = multer({ storage })
 const Router = express.Router()
 
 Router.get('/:postId', articleController.getArticleById)
+
 Router.post('/', upload.array('images'), articleController.createArticle)
 Router.get('/', articleController.getAllArticlesWithComments)
 Router.delete('/:id', articleController.deleteArticle)

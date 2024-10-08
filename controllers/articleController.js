@@ -1,5 +1,37 @@
 import { articleService } from '../services/articleService.js'
 import Article from '../models/Article.js'
+import { Storage } from '@google-cloud/storage'
+import { env } from '../config/environtment.js'
+
+const storage = new Storage({
+  projectId: env.PROJECT_ID,
+  keyFilename: env.KEYFILENAME
+})
+
+const bucket = storage.bucket(env.BUCKET_NAME)
+
+// Hàm tải ảnh lên Google Cloud Storage
+const uploadImageToStorage = async (file) => {
+  if (!file) throw new Error('No image file provided')
+  const fileName = `${Date.now()}_${file.originalname}`
+  const fileUpload = bucket.file(fileName)
+
+  return new Promise((resolve, reject) => {
+    const blobStream = fileUpload.createWriteStream({
+      metadata: { contentType: file.mimetype }
+    })
+
+    blobStream.on('error', (error) =>
+      reject(`Error uploading to Cloud Storage: ${error}`)
+    )
+    blobStream.on('finish', () =>
+      resolve(
+        `https://storage.googleapis.com/${bucket.name}/${fileUpload.name}`
+      )
+    )
+    blobStream.end(file.buffer)
+  })
+}
 
 const getArticleById = async (req, res) => {
   try {
@@ -18,15 +50,29 @@ const getArticleById = async (req, res) => {
 }
 
 // Tạo bài viết
+
 const createArticle = async (req, res) => {
   try {
-    console.log('Dữ liệu nhận được từ client:', req.body) // Kiểm tra dữ liệu đầu vào
-    const savedArticle = await articleService.createArticleService(req.body)
+    const { content, scope, hashTag, userId } = req.body
+
+    // Upload từng file trong `req.files` và lưu các URL
+    const listPhoto = await Promise.all(
+      req.files.map((file) => uploadImageToStorage(file))
+    )
+
+    const savedArticle = await articleService.createArticleService({
+      content,
+      listPhoto,
+      scope,
+      hashTag,
+      userId
+    })
+
     res
       .status(201)
       .json({ message: 'Post created successfully', post: savedArticle })
   } catch (error) {
-    console.error('Lỗi khi tạo bài viết:', error)
+    console.error('Error creating article:', error)
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 }

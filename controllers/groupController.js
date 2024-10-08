@@ -1,5 +1,6 @@
 // controllers/groupController.js
 import { groupService } from '../services/groupServices.js'
+import Group from '../models/Group.js'
 
 const getUserGroups = async (req, res) => {
   try {
@@ -19,21 +20,18 @@ const getUserGroups = async (req, res) => {
   }
 }
 
-const getGroupArticles = async (req, res) => {
+const getAllGroupArticles = async (req, res) => {
+  const { userId } = req.params
+
   try {
-    const userId = req.params.userId
+    // Gọi service để lấy dữ liệu
+    const articles = await groupService.getAllGroupArticlesService(userId)
 
-    // Gọi service để lấy danh sách bài viết của các nhóm mà người dùng đã tham gia
-    const articles = await groupService.getGroupArticlesService(userId)
-
-    // Trả về kết quả
-    return res.status(200).json({
-      message: `Lấy thành công ${articles.length} bài viết`,
-      articles
-    })
+    // Trả về danh sách bài viết với thông tin đã được xử lý
+    res.status(200).json(articles)
   } catch (error) {
-    console.error('Lỗi khi lấy bài viết của nhóm:', error.message)
-    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+    // Xử lý lỗi và gửi thông báo lỗi cho client
+    res.status(500).json({ message: error.message })
   }
 }
 
@@ -93,40 +91,11 @@ const createGroup = async (req, res) => {
   }
 }
 
-// Controller để thêm một quản trị viên mới vào nhóm
-const addAdministrator = async (req, res) => {
-  try {
-    const { groupId, newAdminId } = req.body
-
-    if (!groupId || !newAdminId) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng cung cấp ID nhóm và ID quản trị viên mới.' })
-    }
-
-    // Gọi service để thêm quản trị viên mới
-    const updatedGroup = await groupService.addAdministratorService(
-      groupId,
-      newAdminId
-    )
-
-    return res.status(200).json({
-      message: 'Quản trị viên mới đã được thêm thành công!',
-      group: updatedGroup
-    })
-  } catch (error) {
-    console.error('Lỗi khi thêm quản trị viên:', error.message)
-    return res.status(500).json({
-      message: 'Có lỗi xảy ra khi thêm quản trị viên.',
-      error: error.message
-    })
-  }
-}
 const getProcessedArticles = async (req, res) => {
   try {
     const groupId = req.params.groupId // Lấy groupId từ URL
 
-    // Gọi service để lấy danh sách bài viết của nhóm với trạng thái "approved"
+    // Gọi service để lấy danh sách bài viết của nhóm với trạng thái "processed" và chưa bị xóa
     const articles = await groupService.getProcessedArticlesService(groupId)
 
     // Trả về kết quả
@@ -136,7 +105,10 @@ const getProcessedArticles = async (req, res) => {
     })
   } catch (error) {
     console.error('Lỗi khi lấy bài viết của nhóm:', error.message)
-    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+    return res.status(500).json({
+      message: 'Lỗi server khi lấy bài viết đã duyệt',
+      error: error.message
+    })
   }
 }
 
@@ -274,20 +246,54 @@ const getGroupMembers = async (req, res) => {
 const removeMember = async (req, res) => {
   try {
     const { groupId, memberId } = req.params
+    const { requesterId } = req.body // Lấy ID của người yêu cầu xóa thành viên
 
-    // Gọi service để xóa thành viên khỏi nhóm
+    // Tìm thông tin nhóm
+    const group = await Group.findById(groupId)
+    if (!group) {
+      return res.status(404).json({ message: 'Nhóm không tồn tại.' })
+    }
+
+    // Kiểm tra nếu người yêu cầu không phải là Admin hoặc Owner của nhóm
+    if (
+      group.idAdmin.toString() !== requesterId &&
+      !group.Administrators.some(
+        (admin) => admin.idUser.toString() === requesterId
+      )
+    ) {
+      return res.status(403).json({
+        message:
+          'Lỗi xác thực quyền. Bạn không có quyền thực hiện hành động này.'
+      })
+    }
+
+    // Kiểm tra nếu người yêu cầu là quản trị viên nhưng đang muốn xóa một quản trị viên khác (không được phép)
+    if (
+      group.idAdmin.toString() !== requesterId &&
+      group.Administrators.some((admin) => admin.idUser.toString() === memberId)
+    ) {
+      return res.status(403).json({
+        message: 'Quản trị viên không thể xóa các quản trị viên khác.'
+      })
+    }
+
+    // Kiểm tra nếu đang xóa chính người tạo nhóm (không được phép)
+    if (group.idAdmin.toString() === memberId) {
+      return res.status(403).json({ message: 'Không thể xóa người tạo nhóm.' })
+    }
+
+    // Tiếp tục xóa thành viên nếu các kiểm tra quyền thành công
     const updatedGroup = await groupService.removeMemberService(
       groupId,
       memberId
     )
-
     return res.status(200).json({
       message: 'Thành viên đã được xóa khỏi nhóm thành công!',
       group: updatedGroup
     })
   } catch (error) {
     console.error('Lỗi khi xóa thành viên:', error.message)
-    return res.status(400).json({ message: error.message }) // Trả về lỗi với mã 400
+    return res.status(400).json({ message: error.message })
   }
 }
 
@@ -318,25 +324,28 @@ const updateGroupRules = async (req, res) => {
     return res.status(500).json({ message: 'Lỗi server', error: error.message })
   }
 }
+
 const addAdmin = async (req, res) => {
   try {
-    const { groupId } = req.params // Nhận groupId từ params
-    const userId = req.body.userId // Nhận userId từ body
-    const adminId = req.body.adminId // Nhận adminId từ body
+    const { groupId } = req.params // Lấy `groupId` từ URL params
+    const { adminId, currentUserId } = req.body // Lấy `adminId` từ body request
+    //const currentUserId = req.userId // Giả sử `userId` có trong `req` từ middleware xác thực
 
-    const updatedGroup = await groupService.addAdministrator(
+    // Gọi service để thêm quản trị viên với trạng thái `pending`
+    const updatedGroup = await groupService.addAdminService(
       groupId,
-      userId,
-      adminId
+      adminId,
+      currentUserId
     )
+
     return res.status(200).json({
-      message: 'Quản trị viên đã được thêm thành công',
-      group: updatedGroup
+      message: 'Đã gửi lời mời cho người dùng để trở thành quản trị viên!',
+      updatedGroup
     })
   } catch (error) {
-    console.error('Error adding administrator:', error)
+    console.error('Error adding admin:', error.message)
     return res.status(500).json({
-      message: 'Lỗi khi thêm quản trị viên',
+      message: 'Có lỗi xảy ra khi thêm quản trị viên.',
       error: error.message
     })
   }
@@ -388,11 +397,276 @@ const rejectInvite = async (req, res) => {
   }
 }
 
+const getAvailableMembers = async (req, res) => {
+  try {
+    const { groupId } = req.params
+
+    // Gọi service để lấy danh sách các thành viên có thể mời làm quản trị viên
+    const availableMembers = await groupService.getAvailableMembersService(
+      groupId
+    )
+
+    // Trả về kết quả nếu thành công
+    return res.status(200).json({
+      message: `Lấy thành công ${availableMembers.length} thành viên có thể mời làm quản trị viên.`,
+      availableMembers
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách thành viên có thể mời:', error.message)
+    return res.status(500).json({
+      message: 'Lỗi server',
+      error: error.message
+    })
+  }
+}
+
+const cancelInvite = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { userId, currentUserId } = req.body
+
+    const group = await groupService.cancelInviteService(
+      groupId,
+      userId,
+      currentUserId
+    )
+    return res
+      .status(200)
+      .json({ message: 'Đã hủy lời mời thành công.', group })
+  } catch (error) {
+    return res.status(400).json({ message: error.message })
+  }
+}
+
+// Controller lấy danh sách lời mời đang chờ xác nhận
+const getPendingInvites = async (req, res) => {
+  try {
+    const { groupId } = req.params
+
+    const pendingInvites = await groupService.getPendingInvitesService(groupId)
+    return res.status(200).json({
+      message: `Lấy thành công ${pendingInvites.length} lời mời đang chờ.`,
+      pendingInvites
+    })
+  } catch (error) {
+    return res.status(400).json({ message: error.message })
+  }
+}
+
+const getAcceptedAdministrators = async (req, res) => {
+  const { groupId } = req.params
+
+  try {
+    // Gọi service để lấy danh sách quản trị viên đã được chấp nhận
+    const acceptedAdministrators =
+      await groupService.getAcceptedAdministratorsService(groupId)
+    res.status(200).json({
+      message: `Lấy thành công ${acceptedAdministrators.length} quản trị viên.`,
+      acceptedAdministrators
+    })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+const getUserArticlesInGroup = async (req, res) => {
+  try {
+    const { groupId, userId } = req.params
+
+    // Gọi service để lấy tất cả các bài viết của người dùng trong nhóm cụ thể
+    const articles = await groupService.getUserArticlesInGroupService(
+      groupId,
+      userId
+    )
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: `Lấy thành công ${articles.length} bài viết của người dùng trong nhóm.`,
+      articles
+    })
+  } catch (error) {
+    console.error(
+      'Lỗi khi lấy bài viết của người dùng trong nhóm:',
+      error.message
+    )
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const getUserPendingInvites = async (req, res) => {
+  try {
+    const { groupId, userId } = req.params // Lấy groupId và userId từ params
+    // Kiểm tra tính hợp lệ của các ID
+    if (!groupId || !userId) {
+      return res.status(400).json({ message: 'Thiếu groupId hoặc userId' })
+    }
+
+    // Gọi service để lấy danh sách lời mời quản trị viên của người dùng trong nhóm
+    const pendingInvites = await groupService.getUserPendingInvitesService(
+      groupId,
+      userId
+    )
+
+    // Trả về kết quả nếu thành công
+    return res.status(200).json({
+      message: `Lấy thành công ${pendingInvites.length} lời mời làm quản trị viên.`,
+      pendingInvites
+    })
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách lời mời:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const acceptAdminInvite = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { userId } = req.body
+
+    if (!groupId || !userId) {
+      return res
+        .status(400)
+        .json({ message: 'Thiếu thông tin groupId hoặc userId.' })
+    }
+
+    // Gọi service để cập nhật trạng thái lời mời thành 'accepted'
+    const updatedGroup = await groupService.acceptAdminInviteService(
+      groupId,
+      userId
+    )
+
+    return res.status(200).json({
+      message: 'Lời mời quản trị viên đã được chấp nhận thành công.',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Lỗi khi chấp nhận lời mời quản trị viên:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const rejectAdminInvite = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { userId } = req.body
+
+    if (!groupId || !userId) {
+      return res
+        .status(400)
+        .json({ message: 'Thiếu thông tin groupId hoặc userId.' })
+    }
+
+    // Gọi service để xóa lời mời khỏi danh sách admin nếu đang ở trạng thái pending
+    const updatedGroup = await groupService.rejectAdminInviteService(
+      groupId,
+      userId
+    )
+
+    return res.status(200).json({
+      message:
+        'Lời mời quản trị viên đã bị từ chối và xóa khỏi danh sách thành công.',
+      group: updatedGroup
+    })
+  } catch (error) {
+    console.error('Lỗi khi từ chối lời mời quản trị viên:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const getUserRole = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { userId } = req.query
+
+    if (!groupId || !userId) {
+      return res.status(400).json({ message: 'Thiếu groupId hoặc userId.' })
+    }
+
+    // Gọi service để lấy vai trò của người dùng
+    const role = await groupService.getUserRoleService(groupId, userId)
+
+    return res.status(200).json({ role })
+  } catch (error) {
+    console.error('Lỗi khi lấy vai trò người dùng:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const removeAdminRole = async (req, res) => {
+  try {
+    const { groupId } = req.params // Lấy groupId từ URL params
+    const { userId } = req.body // Lấy userId từ body request
+
+    // Kiểm tra đầu vào
+    if (!groupId || !userId) {
+      return res
+        .status(400)
+        .json({ message: 'Thiếu thông tin groupId hoặc userId.' })
+    }
+
+    // Gọi service để chuyển quyền quản trị viên sang thành viên
+    const result = await groupService.removeAdminRoleService(groupId, userId)
+
+    if (result) {
+      return res.status(200).json({
+        message:
+          'Người dùng đã rời khỏi vai trò quản trị viên và trở thành thành viên.'
+      })
+    } else {
+      return res
+        .status(404)
+        .json({ message: 'Không tìm thấy quản trị viên này trong nhóm.' })
+    }
+  } catch (error) {
+    console.error(
+      'Lỗi khi chuyển quyền từ quản trị viên thành viên:',
+      error.message
+    )
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+const sendJoinRequest = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { userId } = req.body
+
+    // Kiểm tra dữ liệu đầu vào
+    if (!groupId || !userId) {
+      return res.status(400).json({ message: 'Thiếu groupId hoặc userId' })
+    }
+
+    // Gọi service để thực hiện yêu cầu tham gia nhóm
+    const result = await groupService.sendJoinRequestService(groupId, userId)
+
+    return res.status(200).json({
+      message: 'Yêu cầu tham gia nhóm đã được gửi thành công!',
+      result
+    })
+  } catch (error) {
+    console.error('Lỗi khi gửi yêu cầu tham gia nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const revokeRequest = async (req, res) => {
+  try {
+    const { groupId } = req.params // Lấy ID của nhóm
+    const { userId } = req.body // Lấy userId từ body request
+
+    // Gọi service để hủy yêu cầu tham gia nhóm
+    const result = await groupService.revokeRequestService(groupId, userId)
+
+    // Trả về thông báo thành công
+    return res
+      .status(200)
+      .json({ message: 'Yêu cầu tham gia nhóm đã được thu hồi.' })
+  } catch (error) {
+    console.error('Lỗi khi thu hồi yêu cầu tham gia nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
 export const groupController = {
   getUserGroups,
-  getGroupArticles,
+  getAllGroupArticles,
   createGroup,
-  addAdministrator,
   getNotJoinedGroups,
   getProcessedArticles,
   createGroupArticle,
@@ -405,5 +679,17 @@ export const groupController = {
   addAdmin,
   getRequests,
   acceptInvite,
-  rejectInvite
+  rejectInvite,
+  getAvailableMembers,
+  cancelInvite,
+  getPendingInvites,
+  getAcceptedAdministrators,
+  getUserArticlesInGroup,
+  getUserPendingInvites,
+  acceptAdminInvite,
+  rejectAdminInvite,
+  getUserRole,
+  removeAdminRole,
+  sendJoinRequest,
+  revokeRequest
 }
