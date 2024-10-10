@@ -117,33 +117,42 @@ const getAllGroupArticlesService = async (userId) => {
 
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new Error('ID người dùng không hợp lệ.')
-  }
+  try {
+    // Kiểm tra tính hợp lệ của ID người dùng
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ.')
+    }
 
-  // Lấy tất cả các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái `pending`
-  const groups = await Group.find({
-    $or: [
-      { 'members.listUsers.idUser': { $ne: userId } }, // Nhóm mà người dùng chưa tham gia
-      {
-        'members.listUsers': {
-          $elemMatch: { idUser: userId, state: 'pending' }
+    // Tìm tất cả các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái `pending`
+    const groups = await Group.find({
+      $or: [
+        { 'members.listUsers.idUser': { $ne: userId } }, // Điều kiện nhóm mà người dùng chưa tham gia
+        {
+          'members.listUsers': {
+            $elemMatch: { idUser: userId, state: 'pending' } // Điều kiện nhóm có người dùng đang ở trạng thái `pending`
+          }
         }
-      } // Nhóm có người dùng ở trạng thái `pending`
-    ]
-  })
+      ],
+      _destroy: { $exists: false } // Điều kiện lọc các nhóm chưa bị xóa
+    }).lean() // `lean()` để trả về JS object thuần, giúp tối ưu hiệu suất
 
-  // Tạo một mảng để chứa trạng thái của người dùng trong từng nhóm
-  const groupsWithUserState = groups.map((group) => {
-    // Tìm trạng thái của người dùng trong nhóm (nếu có)
-    const userState =
-      group.members.listUsers.find(
-        (member) => member.idUser.toString() === userId
-      )?.state || 'not_joined'
-    return { ...group.toObject(), userState } // Thêm trạng thái của người dùng vào kết quả trả về
-  })
+    // Tạo một mảng để chứa trạng thái của người dùng trong từng nhóm
+    const groupsWithUserState = groups.map((group) => {
+      // Tìm trạng thái của người dùng trong nhóm (nếu có)
+      const userState =
+        group.members.listUsers.find(
+          (member) => member.idUser.toString() === userId
+        )?.state || 'not_joined' // Nếu không có trạng thái, mặc định là 'not_joined'
 
-  return groupsWithUserState
+      // Trả về đối tượng nhóm kèm theo trạng thái `userState`
+      return { ...group, userState }
+    })
+
+    return groupsWithUserState // Trả về danh sách nhóm kèm theo `userState`
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error)
+    throw new Error('Không thể lấy danh sách nhóm chưa tham gia.')
+  }
 }
 
 // Hàm tạo nhóm mới
@@ -169,7 +178,12 @@ const createGroupService = async ({
     rule,
     members: {
       count: 1,
-      listUsers: [{ idUser: idAdmin }] // Người tạo nhóm được thêm vào danh sách thành viên
+      listUsers: [
+        {
+          idUser: idAdmin,
+          state: 'accepted'
+        }
+      ] // Người tạo nhóm được thêm vào danh sách thành viên
     },
     Administrators: [] // Danh sách ban đầu trống
   })
@@ -244,14 +258,16 @@ const getProcessedArticlesService = async (groupId) => {
     'article.listArticle.idArticle'
   )
 
-  // Lọc các bài viết `processed`
+  // Lọc các bài viết `processed` chưa bị xóa (`_destroy` không tồn tại hoặc bằng `null`)
   const processedArticles = groupData.article.listArticle.filter(
-    (articleItem) => articleItem.state === 'processed'
+    (articleItem) =>
+      articleItem.state === 'processed' && !articleItem.idArticle._destroy
   )
 
   // Trả về dữ liệu đầy đủ của từng bài viết
   const articles = await Article.find({
-    _id: { $in: processedArticles.map((item) => item.idArticle) }
+    _id: { $in: processedArticles.map((item) => item.idArticle) },
+    _destroy: { $exists: false } // Điều kiện để chỉ lấy những bài viết chưa bị xóa
   })
     .populate('createdBy', 'firstName lastName displayName avt')
     .sort({ createdAt: -1 })
@@ -277,7 +293,7 @@ const createArticleService = async ({
       scope,
       state: state || 'pending', // Đặt trạng thái mặc định là 'pending'
       hashTag,
-      listPhoto: images,
+      listPhoto: images, // Thêm danh sách URL hình ảnh từ `listPhoto`
       interact: {
         emoticons: [],
         comment: []
@@ -296,7 +312,8 @@ const createArticleService = async ({
             idArticle: savedArticle._id,
             state: 'pending'
           }
-        }
+        },
+        $inc: { 'article.count': 1 } // Tăng số lượng bài viết trong nhóm
       },
       { new: true }
     )
@@ -344,22 +361,38 @@ const getPendingArticlesService = async (groupId) => {
 const updateArticleStateService = async (groupId, articleId, newState) => {
   try {
     // Tìm nhóm chứa bài viết cần cập nhật
-    const group = await Group.findOneAndUpdate(
-      { _id: groupId, 'article.listArticle.idArticle': articleId },
-      {
-        'article.listArticle.$.state': newState, // Cập nhật state của bài viết trong `listArticle`
-        updatedAt: new Date() // Cập nhật thời gian `updatedAt` cho nhóm
-      },
-      { new: true }
-    )
-
+    const group = await Group.findOne({
+      _id: groupId,
+      'article.listArticle.idArticle': articleId
+    })
     if (!group) {
       throw new Error(
         'Không tìm thấy nhóm hoặc bài viết trong nhóm để cập nhật.'
       )
     }
 
-    return group
+    // Tìm bài viết hiện tại trong danh sách bài viết của nhóm
+    const currentArticle = group.article.listArticle.find(
+      (article) => article.idArticle.toString() === articleId
+    )
+    if (!currentArticle) {
+      throw new Error('Bài viết không tồn tại trong nhóm này.')
+    }
+
+    const previousState = currentArticle.state // Lưu lại trạng thái hiện tại trước khi cập nhật
+
+    // Cập nhật trạng thái mới cho bài viết
+    currentArticle.state = newState
+    group.updatedAt = new Date() // Cập nhật thời gian thay đổi
+
+    // Nếu trạng thái mới là 'processed' và trạng thái trước đó không phải là 'processed', tăng count
+    if (newState === 'processed' && previousState !== 'processed') {
+      group.article.count += 1
+    }
+
+    // Lưu lại nhóm sau khi cập nhật
+    const updatedGroup = await group.save()
+    return updatedGroup
   } catch (error) {
     console.error('Lỗi khi cập nhật trạng thái bài viết:', error.message)
     throw new Error(error.message)
@@ -415,7 +448,7 @@ const removeMemberService = async (groupId, memberId) => {
     throw new Error('ID nhóm hoặc thành viên không hợp lệ.')
   }
 
-  // Tìm nhóm và xóa thành viên khỏi danh sách
+  // Tìm nhóm và kiểm tra tính hợp lệ của nhóm
   const group = await Group.findById(groupId)
   if (!group) {
     throw new Error('Nhóm không tồn tại.')
@@ -425,23 +458,48 @@ const removeMemberService = async (groupId, memberId) => {
   group.members.listUsers = group.members.listUsers.filter(
     (member) => member.idUser.toString() !== memberId
   )
-  group.members.count = group.members.listUsers.length
+  group.members.count = group.members.listUsers.length // Cập nhật số lượng thành viên
 
   // Xóa thành viên khỏi danh sách quản trị viên (nếu có)
   group.Administrators = group.Administrators.filter(
     (admin) => admin.idUser.toString() !== memberId
   )
 
-  // Xóa tất cả các bài viết của người dùng trong nhóm
+  // Tìm tất cả các bài viết của người dùng trong nhóm
+  const articlesToDelete = await Article.find({
+    groupID: groupId,
+    createdBy: memberId
+  })
+
+  // Tìm số lượng bài viết có trạng thái `accept`
+  const acceptedArticles = articlesToDelete.filter(
+    (article) => article.state === 'accept'
+  )
+
+  // Cập nhật _destroy cho tất cả các bài viết của người dùng trong nhóm
   await Article.updateMany(
     { groupID: groupId, createdBy: memberId },
     { $set: { _destroy: Date.now() } }
   )
 
+  // Loại bỏ tất cả các ID của bài viết khỏi `listArticle` của nhóm
+  const articleIdsToRemove = articlesToDelete.map((article) =>
+    article._id.toString()
+  )
+  group.article.listArticle = group.article.listArticle.filter(
+    (articleId) => !articleIdsToRemove.includes(articleId.toString())
+  )
+
+  // Cập nhật lại số lượng bài viết của nhóm theo số bài viết đã được `accept`
+  group.article.count -= acceptedArticles.length
+
   // Lưu nhóm sau khi cập nhật
   await group.save()
 
-  return group
+  return {
+    message: 'Đã xóa thành viên khỏi nhóm và xóa tất cả bài viết liên quan.',
+    group
+  }
 }
 
 const updateGroupRulesService = async (groupId, rules, userId) => {
@@ -463,7 +521,6 @@ const updateGroupRulesService = async (groupId, rules, userId) => {
   return group
 }
 // Thêm quản trị viên
-
 const getRequestsService = async (groupId) => {
   // Kiểm tra xem groupId có hợp lệ không
   if (!mongoose.Types.ObjectId.isValid(groupId)) {
@@ -508,6 +565,15 @@ const acceptInviteService = async (groupId, userId) => {
     throw new Error('Nhóm không tồn tại.')
   }
 
+  // Kiểm tra xem người dùng đã là thành viên của nhóm chưa
+  const existingMemberIndex = group.members.listUsers.findIndex(
+    (member) =>
+      member.idUser.toString() === userId && member.state === 'accepted'
+  )
+  if (existingMemberIndex !== -1) {
+    throw new Error('Người dùng đã là thành viên của nhóm.')
+  }
+
   // Tìm thành viên trong danh sách thành viên với trạng thái là 'pending'
   const memberIndex = group.members.listUsers.findIndex(
     (member) =>
@@ -521,7 +587,12 @@ const acceptInviteService = async (groupId, userId) => {
 
   // Cập nhật trạng thái thành viên thành 'accepted'
   group.members.listUsers[memberIndex].state = 'accepted'
-  await group.save() // Lưu thay đổi
+
+  // Cập nhật số lượng thành viên trong nhóm
+  group.members.count += 1
+
+  // Lưu lại thay đổi
+  await group.save()
 
   // Trả về thông tin thành viên đã cập nhật
   return {
@@ -917,6 +988,147 @@ const revokeRequestService = async (groupId, userId) => {
   return updatedGroup
 }
 
+const editGroupService = async ({
+  groupId,
+  groupName,
+  introduction,
+  avt,
+  backGround,
+  hobbies,
+  rule
+}) => {
+  // Tìm nhóm theo ID và kiểm tra tính hợp lệ
+  const group = await Group.findById(groupId)
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Cập nhật các trường nếu có
+  if (groupName) group.groupName = groupName
+  if (introduction) group.introduction = introduction
+  if (avt) group.avt = avt
+  if (backGround) group.backGround = backGround
+
+  // Kiểm tra `hobbies` và cập nhật hoặc xóa
+  if (Array.isArray(hobbies)) {
+    if (hobbies.length === 0) {
+      group.hobbies = [] // Đặt thành mảng rỗng để xóa tất cả
+    } else {
+      group.hobbies = hobbies // Nếu có phần tử, cập nhật `hobbies`
+    }
+  }
+
+  if (rule) group.rule = rule
+
+  // Lưu lại nhóm sau khi cập nhật
+  const updatedGroup = await group.save()
+  return updatedGroup
+}
+
+// Service xóa nhóm và các dữ liệu liên quan
+const deleteGroupService = async (groupId, userId) => {
+  // Tìm nhóm theo ID và kiểm tra tính hợp lệ
+  const group = await Group.findById(groupId)
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Kiểm tra quyền của người dùng (chỉ cho phép chủ nhóm xóa nhóm)
+  if (group.idAdmin.toString() !== userId) {
+    throw new Error('Bạn không có quyền xóa nhóm này.')
+  }
+
+  // Xóa tất cả các bài viết liên quan đến nhóm
+  await Article.deleteMany({ groupID: groupId })
+
+  // Xóa danh sách quản trị viên và thành viên
+  group.members.listUsers = [] // Xóa tất cả thành viên trong nhóm
+  group.Administrators = [] // Xóa tất cả quản trị viên trong nhóm
+
+  // Đánh dấu thời gian xóa nhóm
+  group._destroy = new Date() // Đặt thời gian xóa nhóm để đánh dấu là đã xóa
+
+  // Lưu nhóm sau khi cập nhật
+  const deletedGroup = await group.save()
+
+  return deletedGroup
+}
+
+const leaveGroupService = async (groupId, userId) => {
+  // Kiểm tra tính hợp lệ của các ID
+  if (
+    !mongoose.Types.ObjectId.isValid(groupId) ||
+    !mongoose.Types.ObjectId.isValid(userId)
+  ) {
+    throw new Error('ID nhóm hoặc ID người dùng không hợp lệ.')
+  }
+
+  // Tìm nhóm theo ID và kiểm tra tính tồn tại
+  const group = await Group.findById(groupId)
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.')
+  }
+
+  // Kiểm tra xem người dùng có phải là thành viên của nhóm không
+  const memberIndex = group.members.listUsers.findIndex(
+    (member) =>
+      member.idUser.toString() === userId && member.state === 'accepted'
+  )
+  if (memberIndex === -1) {
+    throw new Error('Người dùng không phải là thành viên của nhóm.')
+  }
+
+  // Tìm tất cả các bài viết của người dùng trong nhóm và cập nhật `_destroy`
+  const userArticles = await Article.find({
+    groupID: groupId,
+    createdBy: userId,
+    state: 'accepted', // Chỉ lấy những bài viết có trạng thái `accepted`
+    _destroy: { $exists: false }
+  })
+
+  // Cập nhật `_destroy` cho các bài viết được tìm thấy
+  await Article.updateMany(
+    {
+      groupID: groupId,
+      createdBy: userId,
+      state: 'accepted',
+      _destroy: { $exists: false }
+    },
+    { _destroy: new Date() }
+  )
+
+  // Cập nhật số lượng bài viết bị xóa vào chỉ số của nhóm
+  const deletedArticleCount = userArticles.length
+  group.article.count -= deletedArticleCount // Giảm số lượng bài viết của nhóm tương ứng
+
+  // Cập nhật `listArticle` để loại bỏ tất cả các bài viết của người dùng đã bị xóa khỏi `listArticle`
+  group.article.listArticle = group.article.listArticle.filter(
+    (article) => article.createdBy.toString() !== userId
+  )
+
+  // Xóa người dùng khỏi danh sách quản trị viên nếu có
+  group.Administrators = group.Administrators.filter(
+    (admin) => admin.idUser.toString() !== userId
+  )
+
+  // Xóa người dùng khỏi danh sách thành viên
+  group.members.listUsers.splice(memberIndex, 1)
+  group.members.count -= 1 // Giảm số lượng thành viên
+
+  // Kiểm tra nếu số thành viên còn lại là 0, thì tự động xóa nhóm
+  if (group.members.count === 0) {
+    await Group.findByIdAndDelete(groupId) // Xóa nhóm nếu không còn thành viên
+    return { message: `Đã rời nhóm và nhóm đã bị xóa do không còn thành viên.` }
+  }
+
+  // Lưu lại thay đổi
+  await group.save()
+
+  return {
+    message: `Đã rời nhóm và xóa tất cả ${deletedArticleCount} bài viết liên quan.`
+  }
+}
+
 export const groupService = {
   getUserGroupsService,
   getAllGroupArticlesService,
@@ -945,5 +1157,8 @@ export const groupService = {
   getUserRoleService,
   removeAdminRoleService,
   sendJoinRequestService,
-  revokeRequestService
+  revokeRequestService,
+  editGroupService,
+  deleteGroupService,
+  leaveGroupService
 }

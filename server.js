@@ -1,6 +1,7 @@
 import express from 'express'
 import exitHook from 'async-exit-hook'
 import bodyParser from 'body-parser'
+import cookieParser from 'cookie-parser'
 import { connectDB, disconnectDB } from './config/mongodb.js'
 import { env } from './config/environtment.js'
 import { APIs_V1 } from './routes/v1/index.js'
@@ -19,6 +20,7 @@ const START_SERVER = () => {
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true })) // Tăng giới hạn cho URL encoded
 
   app.use(cors(corsOptions))
+  app.use(cookieParser())
   app.use(express.json())
 
   app.use('/v1', APIs_V1)
@@ -52,3 +54,7 @@ const START_SERVER = () => {
     process.exit(1) // Nếu lỗi, thoát ứng dụng với mã lỗi
   }
 })()
+
+
+//AUTHENTICATION - So sánh dữ liệu nhập với database đang có
+//AUTHORIZATION - Bạn là ai ? Bạn có quyền làm gì ?

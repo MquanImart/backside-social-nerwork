@@ -1,6 +1,7 @@
 // controllers/groupController.js
 import { groupService } from '../services/groupServices.js'
 import Group from '../models/Group.js'
+import { cloudStorageService } from '../services/cloudStorageService.js'
 
 const getUserGroups = async (req, res) => {
   try {
@@ -48,17 +49,11 @@ const getNotJoinedGroups = async (req, res) => {
 
 const createGroup = async (req, res) => {
   try {
-    // Lấy thông tin nhóm từ request body
-    const {
-      groupName,
-      type,
-      idAdmin,
-      introduction,
-      avt,
-      backGround,
-      hobbies,
-      rule
-    } = req.body
+    // Log `req.files` để kiểm tra xem tệp có được gửi lên không
+    console.log('req.files:', req.files) // Log để kiểm tra xem các tệp có được truyền lên không
+    console.log('req.body:', req.body) // Kiểm tra các trường khác
+
+    const { groupName, type, idAdmin, introduction, hobbies, rule } = req.body
 
     // Kiểm tra các thông tin cần thiết
     if (!groupName || !type || !idAdmin) {
@@ -67,19 +62,38 @@ const createGroup = async (req, res) => {
         .json({ message: 'Vui lòng điền đầy đủ thông tin cần thiết.' })
     }
 
+    const hobbiesArray = Array.isArray(hobbies) ? hobbies : [hobbies]
+    const ruleArray = Array.isArray(rule) ? rule : [rule]
+
+    // Kiểm tra và tải lên avatar và backGround nếu có
+    let avtUrl = null
+    let backGroundUrl = null
+
+    if (req.files?.avt) {
+      avtUrl = await cloudStorageService.uploadImageToStorage(req.files.avt[0])
+      console.log('Uploaded avt URL:', avtUrl) // Log URL sau khi upload
+    }
+
+    if (req.files?.backGround) {
+      backGroundUrl = await cloudStorageService.uploadImageToStorage(
+        req.files.backGround[0]
+      )
+      console.log('Uploaded background URL:', backGroundUrl) // Log URL sau khi upload
+    }
+
     // Gọi service để tạo nhóm
     const newGroup = await groupService.createGroupService({
       groupName,
       type,
       idAdmin,
       introduction,
-      avt,
-      backGround,
-      hobbies,
-      rule
+      avt: avtUrl,
+      backGround: backGroundUrl,
+      hobbies: hobbiesArray,
+      rule: ruleArray
     })
 
-    // Trả về nhóm vừa được tạo
+    console.log('New group data:', newGroup) // Log thông tin nhóm mới tạo
     return res
       .status(201)
       .json({ message: 'Nhóm được tạo thành công!', group: newGroup })
@@ -114,36 +128,44 @@ const getProcessedArticles = async (req, res) => {
 
 const createGroupArticle = async (req, res) => {
   try {
-    console.log('Body Request:', req.body) // Kiểm tra đầu vào của `req.body`
+    const { content, scope, hashTag, userId, groupId } = req.body
 
-    const { content, userId, groupId, scope, hashTag } = req.body
-
-    if (!content || !userId || !groupId) {
-      return res.status(400).json({
-        message:
-          'Thiếu thông tin bài viết hoặc người tạo bài viết. Vui lòng kiểm tra lại dữ liệu đầu vào.'
-      })
+    // Kiểm tra các thông tin bắt buộc
+    if (!content || !scope || !userId || !groupId) {
+      return res
+        .status(400)
+        .json({ message: 'Thiếu thông tin bài viết hoặc người dùng.' })
     }
 
-    const images = req.files ? req.files.map((file) => file.path) : []
+    // Xử lý upload ảnh lên Google Cloud Storage và lấy URL
+    const listPhoto = req.files
+      ? await Promise.all(
+          req.files.map((file) =>
+            cloudStorageService.uploadImageToStorage(file)
+          )
+        )
+      : []
 
-    const newArticle = await groupService.createArticleService({
+    console.log('URLs các ảnh đã tải lên:', listPhoto)
+
+    // Gọi Service để tạo bài viết mới
+    const savedArticle = await groupService.createArticleService({
       content,
       userId,
       groupId,
       scope,
       state: 'pending',
       hashTag,
-      images
+      images: listPhoto
     })
 
-    return res.status(201).json({
+    res.status(201).json({
       message: 'Bài viết đã được tạo với trạng thái "pending"!',
-      post: newArticle
+      post: savedArticle
     })
   } catch (error) {
     console.error('Lỗi khi tạo bài viết:', error.message)
-    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+    res.status(500).json({ message: 'Lỗi server', error: error.message })
   }
 }
 
@@ -663,6 +685,98 @@ const revokeRequest = async (req, res) => {
   }
 }
 
+const editGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params
+    const { groupName, introduction, hobbies, rule, userId } = req.body
+
+    // Tìm nhóm theo ID để kiểm tra quyền của người dùng
+    const group = await Group.findById(groupId)
+    if (!group) {
+      return res.status(404).json({ message: 'Nhóm không tồn tại.' })
+    }
+
+    // Kiểm tra xem userId có phải là chủ nhóm không
+    if (group.idAdmin.toString() !== userId) {
+      return res.status(403).json({
+        message:
+          'Bạn không có quyền chỉnh sửa nhóm này vì bạn không phải là chủ nhóm.'
+      })
+    }
+
+    // Kiểm tra và cập nhật ảnh đại diện và ảnh nền nếu có
+    let avtUrl = group.avt
+    let backGroundUrl = group.backGround
+    if (req.files?.avt) {
+      avtUrl = await cloudStorageService.uploadImageToStorage(req.files.avt[0])
+    }
+    if (req.files?.backGround) {
+      backGroundUrl = await cloudStorageService.uploadImageToStorage(
+        req.files.backGround[0]
+      )
+    }
+
+    // Gọi hàm service để cập nhật nhóm
+    const updatedGroup = await groupService.editGroupService({
+      groupId,
+      groupName,
+      introduction,
+      avt: avtUrl,
+      backGround: backGroundUrl,
+      hobbies: hobbies ? JSON.parse(hobbies) : [], // Kiểm tra hobbies và chuyển thành mảng rỗng nếu không có
+      rule
+    })
+
+    return res
+      .status(200)
+      .json({ message: 'Cập nhật nhóm thành công!', group: updatedGroup })
+  } catch (error) {
+    console.error('Lỗi khi chỉnh sửa nhóm:', error.message)
+    return res.status(500).json({
+      message: 'Có lỗi xảy ra khi chỉnh sửa nhóm.',
+      error: error.message
+    })
+  }
+}
+
+const deleteGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params // Lấy `groupId` từ params
+    const { userId } = req.query // Lấy `userId` từ query params
+
+    // Gọi service để xóa nhóm và tất cả dữ liệu liên quan
+    const result = await groupService.deleteGroupService(groupId, userId)
+
+    // Trả về thông báo thành công cùng dữ liệu nhóm đã xóa
+    return res
+      .status(200)
+      .json({ message: 'Nhóm đã được xóa thành công!', group: result })
+  } catch (error) {
+    console.error('Lỗi khi xóa nhóm:', error.message)
+    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
+
+const leaveGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params // Lấy ID của nhóm từ params
+    const { userId } = req.body // Lấy userId từ body request
+
+    // Gọi service để rời nhóm
+    const result = await groupService.leaveGroupService(groupId, userId)
+
+    return res.status(200).json({
+      message: 'Rời nhóm thành công và xóa tất cả dữ liệu liên quan.',
+      result
+    })
+  } catch (error) {
+    console.error('Lỗi khi rời nhóm:', error.message)
+    return res
+      .status(500)
+      .json({ message: 'Có lỗi xảy ra khi rời nhóm.', error: error.message })
+  }
+}
+
 export const groupController = {
   getUserGroups,
   getAllGroupArticles,
@@ -691,5 +805,8 @@ export const groupController = {
   getUserRole,
   removeAdminRole,
   sendJoinRequest,
-  revokeRequest
+  revokeRequest,
+  editGroup,
+  deleteGroup,
+  leaveGroup
 }

@@ -16,5 +16,8 @@ export const env = {
 
   PROJECT_ID: process.env.PROJECT_ID,
   BUCKET_NAME: process.env.BUCKET_NAME,
-  KEYFILENAME: process.env.KEYFILENAME
+  KEYFILENAME: process.env.KEYFILENAME,
+
+  JWT_ACCESS_KEY: process.env.JWT_ACCESS_KEY,
+  JWT_REFRESH_KEY: process.env.JWT_REFRESH_KEY
 }

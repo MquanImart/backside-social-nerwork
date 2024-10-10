@@ -192,7 +192,11 @@ const getAllArticlesWithCommentsService = async (userId) => {
             },
             // Điều kiện 3: Bài viết của chính bản thân người dùng
             {
-              createdBy: userObjectId
+              createdBy: userObjectId,
+              $or: [
+                { groupID: { $exists: false } }, // Nếu bài viết không thuộc nhóm, hiển thị bình thường
+                { groupID: { $in: groupIds }, state: 'processed' } // Nếu thuộc nhóm thì phải ở trạng thái processed
+              ]
             }
           ]
         }

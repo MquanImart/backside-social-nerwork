@@ -1,37 +1,6 @@
 import { articleService } from '../services/articleService.js'
 import Article from '../models/Article.js'
-import { Storage } from '@google-cloud/storage'
-import { env } from '../config/environtment.js'
-
-const storage = new Storage({
-  projectId: env.PROJECT_ID,
-  keyFilename: env.KEYFILENAME
-})
-
-const bucket = storage.bucket(env.BUCKET_NAME)
-
-// Hàm tải ảnh lên Google Cloud Storage
-const uploadImageToStorage = async (file) => {
-  if (!file) throw new Error('No image file provided')
-  const fileName = `${Date.now()}_${file.originalname}`
-  const fileUpload = bucket.file(fileName)
-
-  return new Promise((resolve, reject) => {
-    const blobStream = fileUpload.createWriteStream({
-      metadata: { contentType: file.mimetype }
-    })
-
-    blobStream.on('error', (error) =>
-      reject(`Error uploading to Cloud Storage: ${error}`)
-    )
-    blobStream.on('finish', () =>
-      resolve(
-        `https://storage.googleapis.com/${bucket.name}/${fileUpload.name}`
-      )
-    )
-    blobStream.end(file.buffer)
-  })
-}
+import { cloudStorageService } from '../services/cloudStorageService.js'
 
 const getArticleById = async (req, res) => {
   try {
@@ -57,7 +26,7 @@ const createArticle = async (req, res) => {
 
     // Upload từng file trong `req.files` và lưu các URL
     const listPhoto = await Promise.all(
-      req.files.map((file) => uploadImageToStorage(file))
+      req.files.map((file) => cloudStorageService.uploadImageToStorage(file))
     )
 
     const savedArticle = await articleService.createArticleService({

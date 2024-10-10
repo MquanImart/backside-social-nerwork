@@ -8,12 +8,22 @@ const storage = multer.memoryStorage() // Hoặc dùng diskStorage nếu cần l
 const upload = multer({ storage })
 const Router = express.Router()
 
+Router.post(
+  '/create',
+  upload.fields([
+    { name: 'avt', maxCount: 1 },
+    { name: 'backGround', maxCount: 1 }
+  ]),
+  groupController.createGroup
+)
+
 // Tạo bài viết mới
 Router.post(
   '/:groupId/article',
   upload.array('images'),
   groupController.createGroupArticle
 )
+
 // Định nghĩa route lấy tất cả bài viết của nhóm mà người dùng đã tham gia
 Router.get('/articles/:userId', groupController.getAllGroupArticles)
 // Thêm route lấy danh sách nhóm của người dùng
@@ -22,7 +32,19 @@ Router.get('/:userId/not-joined-groups', groupController.getNotJoinedGroups)
 // Lấy tất cả bài viết đã duyệt của group đó
 Router.get('/:groupId/articles/processed', groupController.getProcessedArticles)
 //API tạo group mới
-Router.post('/create', groupController.createGroup)
+Router.post(
+  '/create',
+  upload.fields([
+    { name: 'avt', maxCount: 1 },
+    { name: 'backGround', maxCount: 1 }
+  ]),
+  (req, res, next) => {
+    console.log('Multer processed files:', req.files)
+    next()
+  },
+  groupController.createGroup
+)
+
 // API để lấy bài viết chưa được duyệt của group
 Router.get('/:groupId/pending-articles', groupController.getPendingArticles)
 // API để duyệt bài viết
@@ -78,4 +100,18 @@ Router.post('/:groupId/remove-admin', groupController.removeAdminRole)
 Router.post('/:groupId/join', groupController.sendJoinRequest)
 // API thu hồi yêu cầu tham gia nhóm
 Router.post('/:groupId/revoke-request', groupController.revokeRequest)
+// API chỉnh nhóm
+Router.put(
+  '/:groupId/edit',
+  upload.fields([
+    { name: 'avt', maxCount: 1 },
+    { name: 'backGround', maxCount: 1 }
+  ]),
+  groupController.editGroup
+)
+//API xoá nhóm
+Router.delete('/:groupId/delete', groupController.deleteGroup)
+// API rời nhóm
+Router.post('/:groupId/leave', groupController.leaveGroup)
+
 export const groupRoute = Router
