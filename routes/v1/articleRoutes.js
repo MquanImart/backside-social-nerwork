@@ -10,6 +10,7 @@ const upload = multer({ storage })
 const Router = express.Router()
 
 Router.get('/:postId', articleController.getArticleById)
+
 Router.post('/', upload.array('images'), articleController.createArticle)
 Router.get('/', articleController.getAllArticlesWithComments)
 Router.delete('/:id', articleController.deleteArticle)
@@ -28,5 +29,6 @@ Router.post(
   articleController.likeReplyComment
 )
 Router.post('/:postId/share', articleController.shareArticle)
+Router.get('/user/:userId/articles', articleController.getAllArticlesOfUser) // Lấy tất cả bài viết của người dùng
 
 export const articleRoute = Router
