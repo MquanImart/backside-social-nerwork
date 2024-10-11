@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "balmy-edition-437709-d1",
+  "private_key_id": "088db34d34ce2b367fcddc5e95e20d84739b14e4",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDiRB47MNuJzJnC\nATIz+AAdlj3JaWact/LA0fA2CjIO59TwdLE20AqtFJW7pjjkpFy1mCPaOQshyUvx\nwxoaQKMhMzpfoZwQGT4+jy0PD3FjTguEdr3otj2w6YoDy+l7rOms5Km1LizZHcVu\nXHePVrX7jc+D3tlSSqgJGkVY8cqt2UjBvHOfL2ChUcXWHPDc85D9GPgq7coruNLU\nO0WjFD/n3uqEqzDnpzL6IewDPNjYRLskMJb9x3Drdbfcp79hDWSYsHGLMdfMPD1+\n8Y/DiJ18skVL/b35huT6zqRMhWXsZkIQwxErS9R3UI1ukx3EiOIBH7R90Y9yA+qa\naJmeBdxTAgMBAAECggEAS95ZYLGOO5NuTx4FjmVu7HzPNPTxokUP0dXTPNuIU3Uq\n8oG+VknF+qk3V9dxpkDykTV1eBu+ftK3c1ZfL0RTLrO1tBFFeiRsuZ9alX0xIQIv\nXHhQT3KkFukIDSPXo0+kfwOhYA4enaKc69d3g4motbOkTGxx5GUCGSNE84EH2+ip\nUzROVt7esNC8nEVI8d4ayAA2kPWx6KLj9v531viA9d+PRA/tzZTGHvQrqTn2R/yw\npq99N8gLDW7hNIxMiyRKNOjNS7UMdIkDRMLe6T67SqPGrEYimL1LVvcFBfGatpQE\ncwUMm31VLst042Sh7ZUG+c93qkoLu1PKb4VHvwzmGQKBgQDy2iwq3rZCX2H6DlHR\n4mSpBtdZLnCGa1ZJlz6DTvA9GW4cKJa3weLlxPMos8Lf4UcGFThY0bjciLGgl5JY\nAJrTfdg37bwAz2jBKqLvqdBk4cV81HGr/nobX9hFtNlv298sWMYHf6lNJK79neIx\nhpnSraB+pyFNlP3b64pQ/ZCjfwKBgQDuhBGTqB99w8FAOtKk5poVCHP8wH2mjz/N\nNwp+9DPDFCVTorKVTHXGbM5d8VEubOidMhpvgUhLL5EX2Ow+pQTev0RasasZkeaO\n77YQ5vdp+Mvwb6mgdO3qR4kPuZ99C974F+TPmkEeUsxjsDG9iUK7gliw8VuZcNPl\nnVbFvVphLQKBgQCvT4v+zpNnyo9iAiBSkUn1MvkWag3VG3tI2KPKCpwmn0r7jNlw\ngciX8dtPEKWnFGs/GuZ4R71ZhlwkAAcm/BjIf9osVbQYKaIHgA3rUP0dNlZoTLxa\nWvQu+ruXZnxo4aJz0wnxs9i11bt1XhpBgldc3PY1N9U0uk+gCKLq4IEfZQKBgQCk\nyA9QoL0o6P3w/vKaREq9Lzraqq3kTWE5yMXykYnVQ2zKTEPui4Vukas9EcQRO+K0\n/3FuCbZFY1ZtUEteuCkWLrPtqINZxgewRoHVSYwy5VUYBjz9gur/iW5ys74w6Ouh\nIPjOSHammXNlh8vFczfsTZAypnyvFFkAcGQLdtci/QKBgA+64fhwZimXqD8l6WDo\nsBgLulu+pDFqxD+yuoZcS4Qs1/ykQT/zWou2eHwhnZqeWxRp8lvi110BwpqtkI5B\nOnFxO7TqrHiBM6zSprPtEaBW6pa+1vtAeO8ZUzD7tcAZefNXZOgEXwMMPm6T7FWE\nEOnqSDT27Cx6upyoA34NPR4J\n-----END PRIVATE KEY-----\n",
+  "client_email": "testcloudstorage@balmy-edition-437709-d1.iam.gserviceaccount.com",
+  "client_id": "113928894139909600582",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/testcloudstorage%40balmy-edition-437709-d1.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
