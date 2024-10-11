@@ -1,12 +1,13 @@
 import mongoose from 'mongoose'
 
 const conversationSchema = new mongoose.Schema({
-  _user: {
-    user1: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    user2: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-  },
+  _user: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   content: [
     {
+      _id: false,
       userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       message: {
         type: {
@@ -16,7 +17,8 @@ const conversationSchema = new mongoose.Schema({
         },
         data: { type: String, required: true }
       },
-      sendDate: { type: Date, default: Date.now }
+      sendDate: { type: Date, default: Date.now },
+      viewDate: { type: Date, default: null }
     }
   ]
 })

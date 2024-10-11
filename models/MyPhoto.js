@@ -10,7 +10,7 @@ const myPhotoSchema = new mongoose.Schema({
   type: { type: String, enum: ['img', 'video'], required: true },
   link: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+  updatedAt: Date,
   _destroy: Date
 })
 

@@ -17,6 +17,11 @@ const groupSchema = new mongoose.Schema({
     listUsers: [
       {
         idUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        state: {
+          type: String,
+          enum: ['pending', 'accepted', 'rejected'],
+          default: 'pending'
+        },
         joinDate: { type: Date, default: Date.now }
       }
     ]
@@ -26,7 +31,11 @@ const groupSchema = new mongoose.Schema({
     listArticle: [
       {
         idArticle: { type: mongoose.Schema.Types.ObjectId, ref: 'Article' },
-        state: String
+        state: {
+          type: String,
+          enum: ['pending', 'processed', 'rejected'],
+          default: 'pending'
+        }
       }
     ]
   },
@@ -34,12 +43,17 @@ const groupSchema = new mongoose.Schema({
   Administrators: [
     {
       idUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      state: {
+        type: String,
+        enum: ['pending', 'accepted', 'rejected'],
+        default: 'pending'
+      },
       joinDate: { type: Date, default: Date.now }
     }
   ],
   hobbies: [String],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+  updatedAt: Date,
   _destroy: Date
 })
 

@@ -1,5 +1,6 @@
 import { articleService } from '../services/articleService.js'
 import Article from '../models/Article.js'
+import { cloudStorageService } from '../services/cloudStorageService.js'
 
 const getArticleById = async (req, res) => {
   try {
@@ -18,15 +19,29 @@ const getArticleById = async (req, res) => {
 }
 
 // Tạo bài viết
+
 const createArticle = async (req, res) => {
   try {
-    console.log('Dữ liệu nhận được từ client:', req.body) // Kiểm tra dữ liệu đầu vào
-    const savedArticle = await articleService.createArticleService(req.body)
+    const { content, scope, hashTag, userId } = req.body
+
+    // Upload từng file trong `req.files` và lưu các URL
+    const listPhoto = await Promise.all(
+      req.files.map((file) => cloudStorageService.uploadImageToStorage(file))
+    )
+
+    const savedArticle = await articleService.createArticleService({
+      content,
+      listPhoto,
+      scope,
+      hashTag,
+      userId
+    })
+
     res
       .status(201)
       .json({ message: 'Post created successfully', post: savedArticle })
   } catch (error) {
-    console.error('Lỗi khi tạo bài viết:', error)
+    console.error('Error creating article:', error)
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 }
@@ -291,6 +306,21 @@ const shareArticle = async (req, res) => {
     })
   }
 }
+const getAllArticlesOfUser = async (req, res) => {
+  try {
+    const userId = req.params.userId || req.user._id // Lấy userId từ params hoặc xác thực
+    if (!userId) {
+      return res.status(400).json({ message: 'Thiếu userId' })
+    }
+
+    // Gọi service để lấy tất cả bài viết của người dùng
+    const articles = await articleService.getAllArticlesByUserService(userId)
+    res.status(200).json(articles)
+  } catch (error) {
+    console.error('Lỗi khi lấy tất cả bài viết của người dùng:', error)
+    res.status(500).json({ message: 'Lỗi server', error: error.message })
+  }
+}
 
 export const articleController = {
   getArticleById,
@@ -305,5 +335,6 @@ export const articleController = {
   editArticle,
   likeComment,
   likeReplyComment,
-  shareArticle
+  shareArticle,
+  getAllArticlesOfUser
 }
