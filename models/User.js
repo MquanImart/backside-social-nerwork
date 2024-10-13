@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 
 const collectionSchema = new mongoose.Schema({
   _id: String,
-  name: { type: String, required: true },
+  name: { type: String, required: true }, // Thêm 'sparse: true' để cho phép nhiều null
   items: [String],
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   displayName: String,
-  userName: { type: String, unique: true, default: '' },
+  userName: { type: String, unique: true, default: Date.now },
   details: {
     phoneNumber: String,
     address: String,

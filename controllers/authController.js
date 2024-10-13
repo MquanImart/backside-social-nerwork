@@ -1,107 +1,106 @@
-import { registerService, loginService } from '../services/authService.js'
-import User from '../models/User.js'
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
-import { env } from '../config/environtment.js'
+import { authService } from '../services/authService.js'
 
-// Đăng ký người dùng mới
-const register = async (req, res) => {
+// Controller xử lý đăng ký
+const registerUser = async (req, res) => {
   try {
-    const salt = await bcrypt.genSalt(10)
-    const hashed = await bcrypt(req.body.password, salt)
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      phoneNumber,
+      address,
+      gender,
+      birthDate,
+      userName,
+      hobbies
+    } = req.body
 
-    //Create user
-    const newUser = await new User({
-      username: req.body.username,
-      email: req.body.email,
-      password: hashed
+    // Lấy file avatar và background từ req.files
+    const avtFile = req.files?.avt ? req.files.avt[0] : null
+    const backGroundFile = req.files?.backGround
+      ? req.files.backGround[0]
+      : null
+
+    // Gọi service để thực hiện logic đăng ký
+    const { success, data, message, error } = await authService.registerService(
+      {
+        firstName,
+        lastName,
+        email,
+        password,
+        phoneNumber,
+        address,
+        gender,
+        birthDate,
+        userName,
+        avtFile,
+        backGroundFile,
+        hobbies
+      }
+    )
+
+    if (success) {
+      return res.status(201).json({
+        success,
+        message: 'Tạo tài khoản thành công!',
+        user: data.user
+      })
+    } else {
+      return res.status(400).json({ success, message, error })
+    }
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Lỗi máy chủ. Không thể tạo tài khoản.',
+      error: error.message
     })
-
-    // Saved to db
-    const user = await newUser.save()
-    res.status(200).json(user)
-  } catch (err) {
-    res.status(500).json({ msg: err.message })
   }
 }
-// const loginUser = async (req, res) => {
-//   try {
-//     const user = await findOne({ username: req.body.username })
-//     if (!user) {
-//       res.status(404).json('Sai tên đăng nhập')
-//     }
-//     const validPassword = await bcrypt.compare(req.body.password, user.password)
-//     if (!validPassword) {
-//       res.status(404).json('Sai mật khẩu')
-//     }
-//     if (user && validPassword) {
-//       const accessToken = generateAccessToken(user)
-//       const refreshToken = generateRefreshToken(user)
-//       res.cookie('refreshToken', refreshToken, {
-//         httpOnly: true,
-//         secure: false,
-//         path: '/',
-//         smaeSite: 'strict'
-//       })
-//       const { password, ...others } = user._doc
-//       res.status(200).json(...others, accessToken, refreshToken)
-//     }
-//   } catch (error) {
-//     res.status(500).json({ msg: err.message })
-//   }
-// }
 
-// Đăng nhập người dùng
+// Controller xử lý đăng nhập
 const login = async (req, res) => {
-  try {
-    const { token, user, msg } = await loginService(req.body)
-    res.status(200).json({ token, user, msg })
-  } catch (err) {
-    res.status(400).json({ msg: err.message })
+  const { email, password } = req.body
+  const { success, data, message } = await authService.loginService(
+    email,
+    password
+  )
+
+  if (success) {
+    return res.status(200).json({
+      success,
+      token: data.token,
+      user: data.user
+    })
+  } else {
+    return res.status(400).json({ success, message })
   }
 }
 
-//GENERATE ACCESS TOKEN
-// const generateAccessToken = (user) => {
-//   return jwt.sign(
-//     {
-//       id: user.id,
-//       admin: user.admin
-//     },
-//     env.JWT_ACCESS_KEY,
-//     {
-//       exipresIn: '30s'
-//     }
-//   )
-// }
-// //GENERATE REFRESH TOKEN
-// const generateRefreshToken = (user) => {
-//   return jwt.sign(
-//     {
-//       id: user.id,
-//       admin: user.admin
-//     },
-//     env.JWT_ACCESS_KEY,
-//     {
-//       exipresIn: '365d'
-//     }
-//   )
-// }
+const logout = async (req, res) => {
+  try {
+    // Gọi service để xử lý việc logout
+    const result = await authService.logoutService(req)
 
-// const requestRefreshToken = async (req, res) => {
-//   // take refresh token from user
-//   const refreshToken = req.cookies.refreshToken
-// }
-
-//Store Soke
-// 1) Local Storage
-// XSS
-// 2) HTTPONLY COOKIE
-// CSRF --> SAMESITE
-// 3) REDUX STORE --> ACCESS TOKEN
-// HTTPONLY COOKIE --> REFRESH TOKEN
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        message: result.message
+      })
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: 'Đã có lỗi xảy ra.'
+      })
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng xuất.'
+    })
+  }
+}
 export const authController = {
-  register,
-  login
-  // requestRefreshToken
+  registerUser,
+  login,
+  logout
 }
