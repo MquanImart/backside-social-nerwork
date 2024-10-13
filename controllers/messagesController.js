@@ -66,9 +66,39 @@ const getAllMessagesByUserID = async (req, res) => {
     }
   };
 
+  const createNewMessages = async (req, res) => {
+    const { userID, friendID, message} = req.body;
+    
+    try {
+      const result = await messageService.createConversation(userID, friendID, message);
+      if (result === false){
+        res.status(500).json({message: "Bạn chưa kết bạn với người dùng ID"})
+      }
+      else{
+        res.status(200).json(result);
+      }
+    } catch (error) {
+      console.error('Lỗi khi tạo hộp thoại mới:', error);
+      res.status(500).json({ error: 'Failed to create conversation' });
+    }
+  };
+  
+  const getAllFriendsWithoutChat = async (req, res) => {
+    const userID = req.params.userID;
+    try {
+      const result = await messageService.getAllFriendWithoutChat(userID);
+      res.status(200).json(result);
+
+    } catch (error) {
+      console.error('Lỗi khi tạo hộp thoại mới:', error);
+      res.status(500).json({ error: 'Failed to create conversation' });
+    }
+  };
 export const messageController = {
     getAllMessagesByUserID,
     getMessageWithFriend,
     readMessage,
-    sendMessage
+    sendMessage,
+    createNewMessages,
+    getAllFriendsWithoutChat
 }
