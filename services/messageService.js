@@ -1,6 +1,6 @@
 import Conversation from '../models/Conversation.js'
 import User from '../models/User.js';
-
+import mongoose from 'mongoose';
 const getAllMessagesByID = async (userID) => {
   try {
     const conversations = await Conversation.find();
@@ -28,10 +28,10 @@ const getAllMessagesByID = async (userID) => {
         const users = await Promise.all(userPromises);
     
         return {
-            _id: message._id,           // Trả về ID của message
-            _user: message._user,        // Trả về mảng _user của message
-            content: message.content.length > 0? message.content[message.content.length - 1] : null,    // Trả về nội dung message cuối cùng
-            dataUser: users.filter(user => user !== null)  // Thêm trường dataUser chứa danh sách người dùng đã lọc
+            _id: message._id,           
+            _user: message._user,       
+            content: message.content.length > 0? message.content[message.content.length - 1] : null, 
+            dataUser: users.filter(user => user !== null)  
         };
     })); 
 
@@ -119,9 +119,90 @@ const sendMessage = async (conversationID, content) => {
   }
 }
 
+const createConversation = async (userID, friendID, message) => {
+  try {
+    const user = await User.findOne({_id: userID});
+    if (!user) {
+      throw new Error('User not found');
+    }
+    const hasAllFriends = user.friends.some(friend => friend.idUser.toString() === friendID.toString())
+
+    if (!hasAllFriends) {
+      return false;
+    }
+    const newConversation = new Conversation({
+      _user: [userID, friendID],
+      content: [message]
+    });
+    await newConversation.save();
+
+    const userPromises = newConversation._user.map(async (id) => {
+        const user = await User.findById(id);
+        return {
+            userID: user._id,
+            avt: user.avt,
+            name: user.displayName ? user.displayName : user.userName
+        };
+    });
+  
+    const users = await Promise.all(userPromises);
+
+    return {
+        _id: newConversation._id,
+        _user: newConversation._user,
+        content: newConversation.content,
+        dataUser: users.filter(user => user !== null)
+    }; 
+
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    throw error;
+  }
+};
+
+const getAllFriendWithoutChat = async (userID) => {
+
+  try{
+    const user = await User.findOne({_id: userID});
+    const friendIds = user.friends.map(friend => friend.idUser.toString());
+
+    const conversations = await Conversation.find();
+    const filteredConversations = conversations.filter(conversation => 
+      conversation._user.includes(userID)
+    ); 
+
+    const userInConversations = new Set();
+    filteredConversations.forEach(conversation => {
+      conversation._user.forEach(id => {
+        userInConversations.add(id.toString());
+      });
+    });
+
+    const friendsWithoutChat = friendIds.filter(friendId => !userInConversations.has(friendId));
+    const usersWithoutChat = await User.find({
+      _id: { $in: friendsWithoutChat }
+    });
+    
+    const result = usersWithoutChat.map((userItem) => ({
+      _id: userItem._id,
+      avt: userItem.avt,
+      displayName: userItem.displayName,
+      userName: userItem.userName,
+    }));
+    
+    return result;
+
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    throw error;
+  }
+}
+
 export const messageService = {
     getAllMessagesByID,
     getMessageWithFriend,
     readMessage,
-    sendMessage
+    sendMessage,
+    createConversation,
+    getAllFriendWithoutChat
 }
