@@ -22,7 +22,12 @@ const userSchema = new mongoose.Schema({
   },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
-  displayName: String,
+  displayName: {
+    type: String,
+    default: function () {
+      return `${this.firstName} ${this.lastName}`
+    }
+  },
   userName: { type: String, unique: true, default: Date.now },
   details: {
     phoneNumber: String,
@@ -42,6 +47,18 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
   _destroy: Date
+})
+
+// Middleware để thêm collection mặc định "Tất cả mục đã lưu"
+userSchema.pre('save', function (next) {
+  if (this.collections.length === 0) {
+    this.collections.push({
+      _id: new mongoose.Types.ObjectId().toString(),
+      name: 'Tất cả mục đã lưu',
+      items: []
+    })
+  }
+  next()
 })
 
 const User = mongoose.model('User', userSchema)
