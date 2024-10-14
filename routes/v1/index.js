@@ -6,15 +6,16 @@ import { savedRoute } from './savedRoute.js'
 import { userRoute } from './userRoute.js'
 import { messagesRoute } from './messagesRoutes.js'
 import { notificationRoute } from './notificationRoute.js'
+import { verifyToken } from '../..//middlewares/verifyToken.js'
 
 const Router = express.Router()
 
 Router.use('/auth', authRoute)
-Router.use('/article', articleRoute)
-Router.use('/group', groupRoute)
-Router.use('/saved', savedRoute)
-Router.use('/user', userRoute)
-Router.use('/messages', messagesRoute)
-Router.use('/notifications', notificationRoute)
+Router.use('/article', verifyToken, articleRoute)
+Router.use('/group', verifyToken, groupRoute)
+Router.use('/saved', verifyToken, savedRoute)
+Router.use('/user', verifyToken, userRoute)
+Router.use('/messages', verifyToken, messagesRoute)
+Router.use('/notifications', verifyToken, notificationRoute)
 
 export const APIs_V1 = Router

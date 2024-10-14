@@ -1,58 +1,178 @@
+import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
 
-export const registerService = async ({
+// Service thực hiện logic đăng ký người dùng
+const registerService = async ({
   firstName,
   lastName,
   email,
   password,
-  confirmPassword
+  phoneNumber,
+  address,
+  gender,
+  birthDate,
+  userName,
+  avtFile,
+  backGroundFile,
+  hobbies
 }) => {
-  if (password !== confirmPassword) {
-    throw new Error('Mật khẩu không khớp')
+  try {
+    // Kiểm tra xem email hoặc username đã tồn tại chưa
+    const genderBoolean = gender === 'male' ? true : false
+    const existingUser = await User.findOne({
+      $or: [{ 'account.email': email }, { userName }]
+    })
+    if (existingUser) {
+      return {
+        success: false,
+        message: 'Email hoặc Tên người dùng đã tồn tại.'
+      }
+    }
+
+    // Mã hóa mật khẩu
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    // Tạo người dùng mới
+    const newUser = new User({
+      account: {
+        email,
+        password: hashedPassword
+      },
+      firstName,
+      lastName,
+      userName,
+      details: {
+        phoneNumber,
+        address,
+        gender: genderBoolean,
+        birthDate
+      },
+      hobbies
+    })
+
+    const savedUser = await newUser.save()
+    const userId = savedUser._id.toString()
+
+    let avtUrl = ''
+    let backGroundUrl = ''
+
+    if (avtFile) {
+      avtUrl = await cloudStorageService.uploadImageUserToStorage(
+        avtFile,
+        userId,
+        'avatar'
+      )
+    }
+
+    if (backGroundFile) {
+      backGroundUrl = await cloudStorageService.uploadImageUserToStorage(
+        backGroundFile,
+        userId,
+        'background'
+      )
+    }
+
+    savedUser.avt = avtUrl
+    savedUser.backGround = backGroundUrl
+    await savedUser.save()
+
+    return {
+      success: true,
+      data: {
+        user: {
+          id: savedUser._id,
+          firstName: savedUser.firstName,
+          lastName: savedUser.lastName,
+          email: savedUser.account.email,
+          userName: savedUser.userName,
+          avt: savedUser.avt,
+          backGround: savedUser.backGround,
+          hobbies: savedUser.hobbies
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in registerService:', error.message)
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình tạo tài khoản.',
+      error: error.message
+    }
   }
-
-  // Kiểm tra xem email đã tồn tại chưa
-  let user = await User.findOne({ 'account.email': email })
-  if (user) {
-    throw new Error('Email đã tồn tại')
-  }
-
-  // Tạo người dùng mới và gán `displayName` và `userName` mặc định
-  user = new User({
-    account: { email, password },
-    firstName,
-    lastName,
-    displayName: `${firstName} ${lastName}`, // Gán displayName mặc định
-    userName: email // Sử dụng email làm userName
-  })
-
-  await user.save()
-
-  // Tạo token JWT
-  const payload = { id: user._id }
-  const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '1h' })
-
-  return { token, msg: 'Đăng ký thành công' }
 }
 
-// Service đăng nhập người dùng
-export const loginService = async ({ email, password }) => {
-  // Kiểm tra xem email có tồn tại trong cơ sở dữ liệu không
-  const user = await User.findOne({ 'account.email': email })
-  if (!user) {
-    throw new Error('Email hoặc mật khẩu không hợp lệ')
+// Service xử lý logic đăng nhập
+const loginService = async (email, password) => {
+  try {
+    const user = await User.findOne({ 'account.email': email })
+    if (!user) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    const isMatch = await bcrypt.compare(password, user.account.password)
+    if (!isMatch) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    const token = jwt.sign(
+      { id: user._id, email: user.account.email },
+      env.JWT_SECRET,
+      { expiresIn: '1h' }
+    )
+
+    return {
+      success: true,
+      data: {
+        token,
+        user: {
+          _id: user._id,
+          displayName: user.displayName,
+          avt: user.avt,
+          email: user.account.email
+        }
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng nhập.',
+      error: error.message
+    }
   }
+}
 
-  // Kiểm tra xem mật khẩu có khớp không (ở đây bạn đang lưu mật khẩu dạng plaintext)
-  if (user.account.password !== password) {
-    throw new Error('Email hoặc mật khẩu không hợp lệ')
+const logoutService = async (req) => {
+  try {
+    // Kiểm tra xem token đang được lưu ở đâu, ví dụ trong cookie
+    if (req.cookies.token) {
+      // Xóa cookie chứa token nếu có
+      req.res.clearCookie('token', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Strict'
+      })
+    }
+
+    // Nếu token được lưu trong localStorage phía client, bạn chỉ cần gửi phản hồi thành công
+    return {
+      success: true,
+      message: 'Đăng xuất thành công!'
+    }
+  } catch (error) {
+    console.error('Error in logoutService:', error.message)
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra khi xử lý logout.'
+    }
   }
+}
 
-  // Tạo token JWT
-  const payload = { id: user._id }
-  const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '1h' })
-
-  return { token, user, msg: 'Đăng nhập thành công' }
+export const authService = {
+  registerService,
+  loginService,
+  logoutService
 }
