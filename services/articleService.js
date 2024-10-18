@@ -158,7 +158,6 @@ const getAllArticlesWithCommentsService = async (userId) => {
 
     if (friendIds.length === 0) {
       console.log('Danh sách bạn bè rỗng, không có bài viết để hiển thị.')
-      return []
     }
 
     // Lấy tất cả nhóm mà người dùng đã tham gia
@@ -193,10 +192,6 @@ const getAllArticlesWithCommentsService = async (userId) => {
             // Điều kiện 3: Bài viết của chính bản thân người dùng
             {
               createdBy: userObjectId,
-              $or: [
-                { groupID: { $exists: false } }, // Nếu bài viết không thuộc nhóm, hiển thị bình thường
-                { groupID: { $in: groupIds }, state: 'processed' } // Nếu thuộc nhóm thì phải ở trạng thái processed
-              ]
             }
           ]
         }

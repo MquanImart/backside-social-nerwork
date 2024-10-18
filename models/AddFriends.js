@@ -17,7 +17,7 @@ const addFriendsSchema = new mongoose.Schema({
     default: 'pending'
   },
   createdAt: { type: Date, default: Date.now },
-  acceptedAt: Date
+  acceptedAt: { type: Date, default: null },
 })
 
 const AddFriends = mongoose.model('AddFriends', addFriendsSchema)
