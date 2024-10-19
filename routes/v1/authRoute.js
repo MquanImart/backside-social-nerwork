@@ -13,7 +13,8 @@ Router.post(
   '/register',
   upload.fields([
     { name: 'avt', maxCount: 1 },
-    { name: 'backGround', maxCount: 1 }
+    { name: 'backGround', maxCount: 1 },
+    { name: 'cccd', maxCount: 1 } // CCCD field
   ]),
   authController.registerUser
 )

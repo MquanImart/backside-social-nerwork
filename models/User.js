@@ -41,6 +41,7 @@ const userSchema = new mongoose.Schema({
   collections: [collectionSchema],
   groups: [String],
   backGround: [String],
+  cccdUrl: String,
   aboutMe: String,
   hobbies: [String],
   listArticle: [String],

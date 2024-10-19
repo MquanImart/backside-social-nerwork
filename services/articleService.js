@@ -191,7 +191,7 @@ const getAllArticlesWithCommentsService = async (userId) => {
             },
             // Điều kiện 3: Bài viết của chính bản thân người dùng
             {
-              createdBy: userObjectId,
+              createdBy: userObjectId
             }
           ]
         }
@@ -302,39 +302,37 @@ const addCommentToArticleService = async ({
   _iduser,
   img = []
 }) => {
-  // Tìm thông tin người dùng để lấy `displayName`
-  const user = await User.findById(_iduser).select('displayName avt') // Chỉ lấy `displayName` và `avt`
-  if (!user) {
-    throw new Error('Người dùng không tồn tại')
-  }
-
-  // Tạo bình luận mới với thông tin người dùng
+  // Create the new comment with the user reference
   const newComment = new Comment({
     _iduser,
     content,
     img,
-    displayName: user.displayName, // Thêm `displayName` vào comment
-    userAvatar: user.avt, // Thêm `userAvatar` vào comment nếu cần
     createdAt: new Date(),
     updatedAt: new Date()
   })
 
-  // Lưu bình luận vào CSDL
+  // Save the new comment
   const savedComment = await newComment.save()
 
-  // Tìm bài viết và thêm bình luận vào danh sách comment
-  const article = await Article.findById(postId).populate('interact.comment')
+  // Find the article and add the comment to it
+  const article = await Article.findById(postId)
   if (!article) throw new Error('Bài viết không tồn tại')
 
-  // Thêm comment vào bài viết
+  // Push the comment into the article's comment array
   article.interact.comment.push(savedComment._id)
   article.updatedAt = new Date()
 
-  // Lưu bài viết đã cập nhật
+  // Save the updated article
   await article.save()
 
-  // Trả về comment đã lưu kèm thông tin `displayName` và `avt` của user
-  return savedComment
+  // Populate the _iduser field with user's displayName and avt
+  const populatedComment = await Comment.findById(savedComment._id).populate(
+    '_iduser',
+    'displayName avt'
+  )
+
+  // Return the populated comment
+  return populatedComment
 }
 
 // Service thêm phản hồi vào bình luận
@@ -344,30 +342,43 @@ const addReplyToCommentService = async ({
   content,
   _iduser
 }) => {
+  // Find the article to ensure it exists
   const article = await Article.findById(postId).populate({
     path: 'interact.comment',
     model: 'Comment'
   })
   if (!article) throw new Error('Bài viết không tồn tại')
 
+  // Find the comment that the reply will be added to
   const comment = await Comment.findById(commentId)
   if (!comment) throw new Error('Bình luận không tồn tại')
 
+  // Create a new reply comment
   const newReply = new Comment({
     _iduser,
     content,
     img: [],
     replyComment: [],
     emoticons: [],
-    createdAt: new Date()
+    createdAt: new Date(),
+    updatedAt: new Date()
   })
 
+  // Save the new reply
   const savedReply = await newReply.save()
 
+  // Add the reply to the original comment's replyComment array
   comment.replyComment.push(savedReply._id)
   await comment.save()
 
-  return savedReply
+  // Populate the _iduser field with user's displayName and avt
+  const populatedReply = await Comment.findById(savedReply._id).populate(
+    '_iduser',
+    'displayName avt'
+  )
+
+  // Return the populated reply
+  return populatedReply
 }
 
 const likeArticleService = async (postId, userId) => {
