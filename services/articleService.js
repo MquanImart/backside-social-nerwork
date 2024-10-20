@@ -1,7 +1,9 @@
 import Article from '../models/Article.js'
 import Comment from '../models/Comment.js'
+import Notification from '../models/Notification.js'
 import User from '../models/User.js'
 import Group from '../models/Group.js'
+import { emitEvent } from '../sockets/socket.js'
 import mongoose from 'mongoose'
 
 const getArticleByIdService = async (articleId) => {
@@ -502,32 +504,72 @@ const editArticleService = async (postId, updatedContent, updatedScope) => {
 
 const likeCommentService = async (commentId, userId) => {
   try {
-    // Tìm bình luận cần thích theo `commentId`
-    const comment = await Comment.findById(commentId)
+    const comment = await Comment.findById(commentId).populate('_iduser')
+    console.log('comment', comment)
     if (!comment) {
       throw new Error('Bình luận không tồn tại.')
     }
 
-    // Kiểm tra xem người dùng đã like bình luận này chưa
+    const user = await User.findById(userId)
+    if (!user) {
+      throw new Error('Người dùng không tồn tại')
+    }
+
+    const displayName = user.displayName || 'Người dùng'
+    const avt =
+      user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : ''
+
+    // Check if the user has already liked the comment
     const likedIndex = comment.emoticons.findIndex(
       (emoticon) =>
         emoticon._iduser.toString() === userId &&
         emoticon.typeEmoticons === 'like'
     )
 
+    let action = '' // Default action is unlike
+
     if (likedIndex > -1) {
-      // Nếu đã like, bỏ like bằng cách xóa dữ liệu
+      // If already liked, remove the like
       comment.emoticons.splice(likedIndex, 1)
+      action = 'unlike'
     } else {
-      // Nếu chưa like, thêm like mới vào mảng `emoticons`
+      // If not liked, add a new like
       comment.emoticons.push({
         _iduser: userId,
         typeEmoticons: 'like'
       })
+      action = 'like'
     }
 
-    // Lưu thay đổi vào CSDL
+    // Save the changes to the database
     await comment.save()
+
+    // If the action was 'like', create and emit a notification
+    if (action === 'like') {
+      const notification = new Notification({
+        senderId: userId,
+        receiverId: comment._iduser._id, // Receiver is the author of the comment
+        message: `${displayName} đã thích bình luận của bạn`,
+        status: 'unread',
+        createdAt: new Date()
+      })
+
+      await notification.save()
+
+      // Emit the WebSocket event to notify the receiver
+      emitEvent('like_comment_notification', {
+        senderId: {
+          _id: userId,
+          avt: avt ? [avt] : [''], // Avatar of the liker
+          displayName: displayName
+        },
+        commentId,
+        receiverId: comment._iduser._id,
+        message: `${displayName} đã thích bình luận của bạn`,
+        status: 'unread',
+        createdAt: new Date()
+      })
+    }
 
     return comment
   } catch (error) {
@@ -576,11 +618,21 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
   return reply // Trả về reply đã được cập nhật
 }
 
+// Service - shareArticleService
 const shareArticleService = async ({ postId, content, scope, userId }) => {
   // Kiểm tra người dùng có tồn tại không
   const user = await User.findById(userId)
   if (!user) {
     throw new Error('Người dùng không tồn tại')
+  }
+  // Kiểm tra thông tin đầu vào
+  if (!postId) {
+    return res.status(400).json({ message: 'Thiếu postId hoặc userId' })
+  }
+
+  const article = await Article.findById(postId).populate('createdBy')
+  if (!article) {
+    return res.status(404).json({ message: 'Bài viết không tồn tại' })
   }
 
   // Tạo bài viết mới
@@ -599,11 +651,26 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
 
   const savedArticle = await newArticle.save()
 
+  // Lưu thông báo vào database
+  const notification = new Notification({
+    senderId: userId,
+    receiverId: article.createdBy._id,
+    message: `${
+      user.displayName || `${user.firstName} ${user.lastName}`
+    } đã chia sẻ bài viết của bạn.`,
+    status: 'unread',
+    createdAt: new Date()
+  })
+
+  await notification.save()
+
+  // Trả về bài viết mới và thông tin người chia sẻ
   return {
     ...savedArticle.toObject(),
     createdBy: {
       _id: user._id,
-      displayName: user.displayName || `${user.firstName} ${user.lastName}`
+      displayName: user.displayName || `${user.firstName} ${user.lastName}`,
+      avt: user.avt ? user.avt[user.avt.length - 1] : '' // Avatar của người chia sẻ
     }
   }
 }

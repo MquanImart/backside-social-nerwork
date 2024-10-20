@@ -28,8 +28,8 @@ const calculateAge = (birthDate) => {
 
 const checkCCCDService = async (cccdFile) => {
   try {
-    const API_ENDPOINT = 'https://api.fpt.ai/vision/idr/vnm'
-    const API_KEY = 'xeQqCGaoO9pOpTUC0NRACg69cQJYuomJ'
+    const API_ENDPOINT = env.API_ENDPOINT_CCCD
+    const API_KEY = env.API_KEY_CCCD
 
     const formData = new FormData()
     formData.append(
@@ -212,14 +212,14 @@ const loginService = async (email, password) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.account.password)
-    if (!isMatch) {
+    if (!isMatch) { 
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
 
     const token = jwt.sign(
       { id: user._id, email: user.account.email },
       env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '2h' }
     )
 
     return {

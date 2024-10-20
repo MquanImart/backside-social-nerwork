@@ -1,4 +1,5 @@
 import express from 'express'
+import http from 'http' // Tạo HTTP server
 import exitHook from 'async-exit-hook'
 import bodyParser from 'body-parser'
 import cookieParser from 'cookie-parser'
@@ -6,10 +7,13 @@ import { connectDB, disconnectDB } from './config/mongodb.js'
 import { env } from './config/environtment.js'
 import { APIs_V1 } from './routes/v1/index.js'
 import cors from 'cors' // Import cors
-//import cookieParser from 'cookie-parser'
+import { initSocket } from './sockets/socket.js'
 
 const START_SERVER = () => {
   const app = express()
+
+  // Tạo HTTP server từ Express app
+  const server = http.createServer(app)
 
   // Parse body và cookie
   const corsOptions = {
@@ -25,8 +29,11 @@ const START_SERVER = () => {
 
   app.use('/v1', APIs_V1)
 
+  // Khởi tạo socket.io
+  initSocket(server) // Khởi tạo WebSocket
+
   // Khởi động server
-  app.listen(env.APP_PORT, env.APP_HOST, () => {
+  server.listen(env.APP_PORT, env.APP_HOST, () => {
     console.log(
       `3. Hi ${env.AUTHOR}, Back-end Server is running successfully at http://${env.APP_HOST}:${env.APP_PORT}/`
     )
@@ -54,7 +61,3 @@ const START_SERVER = () => {
     process.exit(1) // Nếu lỗi, thoát ứng dụng với mã lỗi
   }
 })()
-
-
-//AUTHENTICATION - So sánh dữ liệu nhập với database đang có
-//AUTHORIZATION - Bạn là ai ? Bạn có quyền làm gì ?
