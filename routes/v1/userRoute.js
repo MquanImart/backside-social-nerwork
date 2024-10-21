@@ -7,5 +7,8 @@ const Router = express.Router()
 Router.get('/:userId', userController.getUserById)
 // Route lấy bài viết trong bộ sưu tập
 Router.get('/:userId/collections/:collectionId/articles', userController.getArticlesByCollectionId);
+Router.put('/:userId/follow', userController.followUser)
+Router.put('/:userId/unfollow', userController.unFollowUser)
+Router.get('/:userId/relationship', userController.RelationShip)
 
 export const userRoute = Router

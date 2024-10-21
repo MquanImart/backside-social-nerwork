@@ -9,5 +9,6 @@ Router.get('/:UserId/request', friendController.getAllFriendRequest)
 Router.put('/:RequestId/answer', friendController.updateSatusFriendRequest)
 Router.get('/:UserId/my-request', friendController.getMyRequest)
 Router.put('/:RequestId/recall', friendController.revokeInvitation)
+Router.put('/:userId/unfriend', friendController.unFriend)
 
 export const friendRoute = Router

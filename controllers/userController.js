@@ -33,7 +33,57 @@ const getArticlesByCollectionId = async (req, res) => {
   }
 }
 
+const followUser = async (req, res) => {
+  const { userId } = req.params
+  const follower = req.query.follow;
+  try {
+    const result = await userService.followUser(
+      userId,
+      follower
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi khi theo dõi người dùng:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
+const unFollowUser = async (req, res) => {
+  const { userId } = req.params
+  const follower = req.query.unfollow;
+  try {
+    const result = await userService.unFollowUser(
+      userId,
+      follower
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi khi theo dõi người dùng:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
+const RelationShip = async (req, res) => {
+  const { userId } = req.params
+  const follower = req.query.frienId;
+  try {
+    const result = await userService.RelationShip(
+      userId,
+      follower
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi khi theo dõi người dùng:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
 export const userController = {
   getUserById,
-  getArticlesByCollectionId
+  getArticlesByCollectionId,
+  followUser, unFollowUser,
+  RelationShip
 }
