@@ -128,11 +128,6 @@ const likeArticle = async (req, res) => {
     const displayName = user.displayName || 'Người dùng'
     const avt =
       user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : ''
-    console.log(avt)
-    // Kiểm tra dữ liệu tương tác của bài viết
-    if (!Array.isArray(article.interact.emoticons)) {
-      return res.status(500).json({ message: 'Dữ liệu tương tác không hợp lệ' })
-    }
 
     // Kiểm tra xem người dùng đã like bài viết này chưa
     const likedIndex = article.interact.emoticons.findIndex(
@@ -146,6 +141,7 @@ const likeArticle = async (req, res) => {
     if (likedIndex > -1) {
       // Nếu đã like, hủy like
       article.interact.emoticons.splice(likedIndex, 1)
+      article.totalLikes = Math.max(article.totalLikes - 1, 0) // Giảm totalLikes, không cho phép nhỏ hơn 0
       action = 'unlike' // Hành động là hủy like
     } else {
       // Nếu chưa like, thêm like
@@ -154,6 +150,7 @@ const likeArticle = async (req, res) => {
         typeEmoticons: 'like',
         createdAt: new Date()
       })
+      article.totalLikes = article.totalLikes + 1 // Tăng totalLikes
       action = 'like' // Hành động là like
     }
 
@@ -163,7 +160,7 @@ const likeArticle = async (req, res) => {
     // Nếu hành động là like, phát sự kiện WebSocket và lưu thông báo
     if (action === 'like') {
       // Phát sự kiện WebSocket cho client
-      emitEvent('like_notification', {
+      emitEvent('like_article_notification', {
         senderId: {
           _id: userId,
           avt: avt ? [avt] : [''], // Gửi avatar của người like
@@ -188,7 +185,12 @@ const likeArticle = async (req, res) => {
       await newNotification.save()
     }
 
-    return res.status(200).json(article)
+    return res.status(200).json({
+      message: action === 'like' ? 'Đã thích bài viết' : 'Đã bỏ thích bài viết',
+      totalLikes: article.totalLikes, // Trả về số lượng like hiện tại
+      action: action,
+      article: article
+    })
   } catch (error) {
     console.error('Lỗi trong quá trình xử lý like:', error)
     return res
@@ -196,6 +198,7 @@ const likeArticle = async (req, res) => {
       .json({ message: 'Đã xảy ra lỗi', error: error.message })
   }
 }
+
 const shareArticle = async (req, res) => {
   const { postId } = req.params
   const { content, scope, userId } = req.body // Lấy nội dung, phạm vi và userId từ request body

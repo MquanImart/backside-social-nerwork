@@ -15,6 +15,7 @@ const commentSchema = new mongoose.Schema({
       _iduser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     }
   ],
+  totalLikes: { type: Number, default: 0 }, // Thêm tổng số like
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
   _destroy: Date

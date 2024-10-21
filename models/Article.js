@@ -51,6 +51,8 @@ const articleSchema = new mongoose.Schema({
     ],
     comment: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }]
   },
+  totalLikes: { type: Number, default: 0 }, // Thêm tổng số like
+  totalComments: { type: Number, default: 0 }, // Thêm tổng số bình luận
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
   _destroy: Date
