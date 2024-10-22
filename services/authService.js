@@ -11,7 +11,7 @@ import { Readable } from 'stream'
 const bufferToStream = (buffer) => {
   const readable = new Readable()
   readable.push(buffer)
-  readable.push(null) // No more data to read
+  readable.push(null)
   return readable
 }
 // Calculate age based on birthDate
@@ -41,12 +41,12 @@ const checkCCCDService = async (cccdFile) => {
     const response = await axios.post(API_ENDPOINT, formData, {
       headers: {
         api_key: API_KEY,
-        ...formData.getHeaders() // Automatically set the form headers
+        ...formData.getHeaders()
       }
     })
 
     const data = response.data
-    console.log('API Response:', data) // Log the API response for debugging
+    console.log('API Response:', data)
 
     if (!data.data || data.data.length === 0) {
       return {
@@ -55,7 +55,6 @@ const checkCCCDService = async (cccdFile) => {
       }
     }
 
-    // Extract relevant information from API response
     const { dob: birthDate, name, sex } = data.data[0]
 
     if (!birthDate) {
@@ -67,7 +66,6 @@ const checkCCCDService = async (cccdFile) => {
 
     const age = calculateAge(birthDate)
 
-    // Check if the person is at least 18 years old
     if (age < 18) {
       return {
         success: false,
@@ -75,7 +73,6 @@ const checkCCCDService = async (cccdFile) => {
       }
     }
 
-    // Optionally, you can verify the name and gender matches the user input
     return { success: true, birthDate, name, sex, age }
   } catch (error) {
     console.error(
@@ -119,7 +116,6 @@ const registerService = async ({
       }
     }
 
-    // Call checkCCCDService to verify CCCD and check the user's age
     const {
       success,
       message,
@@ -127,10 +123,9 @@ const registerService = async ({
       birthDate: dob
     } = await checkCCCDService(cccdFile)
     if (!success) {
-      return { success: false, message } // Return error from CCCD check
+      return { success: false, message }
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(password, salt)
 
@@ -150,7 +145,6 @@ const registerService = async ({
     let backGroundUrl = ''
     let cccdUrl = ''
 
-    // Upload avatar, background, and CCCD files
     if (avtFile) {
       avtUrl = await cloudStorageService.uploadImageUserToStorage(
         avtFile,
@@ -175,7 +169,7 @@ const registerService = async ({
 
     savedUser.avt = avtUrl
     savedUser.backGround = backGroundUrl
-    savedUser.cccdUrl = cccdUrl // Store the CCCD URL
+    savedUser.cccdUrl = cccdUrl
     await savedUser.save()
 
     return {
@@ -189,7 +183,7 @@ const registerService = async ({
           userName,
           avt: avtUrl,
           backGround: backGroundUrl,
-          cccdUrl, // Include CCCD URL in the response
+          cccdUrl,
           hobbies
         }
       }
@@ -212,7 +206,7 @@ const loginService = async (email, password) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.account.password)
-    if (!isMatch) { 
+    if (!isMatch) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
 
@@ -245,9 +239,7 @@ const loginService = async (email, password) => {
 
 const logoutService = async (req) => {
   try {
-    // Kiểm tra xem token đang được lưu ở đâu, ví dụ trong cookie
     if (req.cookies.token) {
-      // Xóa cookie chứa token nếu có
       req.res.clearCookie('token', {
         httpOnly: true,
         secure: true,
@@ -255,7 +247,6 @@ const logoutService = async (req) => {
       })
     }
 
-    // Nếu token được lưu trong localStorage phía client, bạn chỉ cần gửi phản hồi thành công
     return {
       success: true,
       message: 'Đăng xuất thành công!'

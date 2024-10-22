@@ -157,9 +157,17 @@ const likeArticle = async (req, res) => {
     // Lưu bài viết sau khi cập nhật
     await article.save()
 
+    // Phát sự kiện WebSocket để cập nhật số lượt thích cho tất cả các client
+    emitEvent('update_article_likes', {
+      postId,
+      totalLikes: article.totalLikes, // Số like hiện tại của bài viết
+      action: action, // Hành động like/unlike
+      userId: userId // ID của người thực hiện like/unlike
+    })
+
     // Nếu hành động là like, phát sự kiện WebSocket và lưu thông báo
     if (action === 'like') {
-      // Phát sự kiện WebSocket cho client
+      // Phát sự kiện WebSocket cho client về thông báo
       emitEvent('like_article_notification', {
         senderId: {
           _id: userId,
