@@ -275,9 +275,13 @@ const loginAdminService = async (email, password) => {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
 
-    // Tạo JWT token
+    // Tạo JWT token với vai trò admin
     const token = jwt.sign(
-      { id: admin._id, email: admin.email },
+      {
+        id: admin._id,
+        email: admin.email,
+        role: 'admin' // Thêm vai trò admin vào token
+      },
       env.JWT_SECRET,
       { expiresIn: '2h' }
     )
@@ -288,7 +292,8 @@ const loginAdminService = async (email, password) => {
         token,
         admin: {
           id: admin._id,
-          email: admin.email
+          email: admin.email,
+          role: 'admin' // Trả về thông tin vai trò admin
         }
       }
     }
@@ -338,6 +343,29 @@ const registerAdminService = async ({ email, password }) => {
     }
   }
 }
+const logoutAdminService = async (req) => {
+  try {
+    // Xóa cookie token nếu nó tồn tại
+    if (req.cookies.token) {
+      req.res.clearCookie('token', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Strict'
+      })
+    }
+
+    return {
+      success: true,
+      message: 'Đăng xuất admin thành công!'
+    }
+  } catch (error) {
+    console.error('Error in logoutAdminService:', error.message)
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra khi xử lý logout admin.'
+    }
+  }
+}
 
 export const authService = {
   registerService,
@@ -345,5 +373,6 @@ export const authService = {
   logoutService,
   checkCCCDService,
   loginAdminService,
-  registerAdminService
+  registerAdminService,
+  logoutAdminService
 }

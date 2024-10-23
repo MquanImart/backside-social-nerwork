@@ -11,8 +11,4 @@ Router.get(
   userController.getArticlesByCollectionId
 )
 
-Router.get('/admin/management-users', userController.getAllUsersController)
-
-//API khoá và mở khoá tài khoản của admin
-Router.put('/:userId/:action', userController.lockUnlockUser)
 export const userRoute = Router

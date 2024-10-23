@@ -2,6 +2,7 @@ import express from 'express'
 import { authController } from '../../controllers/authController.js'
 import upload from '../../middlewares/multerConfig.js'
 import { verifyToken } from '../../middlewares/verifyToken.js'
+import { verifyAdmin } from '../../middlewares/verifyToken.js'
 
 const Router = express.Router()
 
@@ -23,5 +24,6 @@ Router.post('/logout', verifyToken, authController.logout)
 // Route đăng nhập với admin
 Router.post('/login-admin', authController.loginAdmin)
 Router.post('/register-admin', authController.registerAdmin)
+Router.post('/logout-admin', verifyAdmin, authController.logoutAdmin)
 
 export const authRoute = Router
