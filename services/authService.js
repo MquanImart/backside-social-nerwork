@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import Admin from '../models/Admin.js'
 import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
 import axios from 'axios'
@@ -260,9 +261,89 @@ const logoutService = async (req) => {
   }
 }
 
+const loginAdminService = async (email, password) => {
+  try {
+    // Tìm admin bằng email
+    const admin = await Admin.findOne({ email })
+    if (!admin) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    // Kiểm tra mật khẩu
+    const isMatch = await bcrypt.compare(password, admin.password)
+    if (!isMatch) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    // Tạo JWT token
+    const token = jwt.sign(
+      { id: admin._id, email: admin.email },
+      env.JWT_SECRET,
+      { expiresIn: '2h' }
+    )
+
+    return {
+      success: true,
+      data: {
+        token,
+        admin: {
+          id: admin._id,
+          email: admin.email
+        }
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng nhập.',
+      error: error.message
+    }
+  }
+}
+
+const registerAdminService = async ({ email, password }) => {
+  try {
+    // Kiểm tra xem admin đã tồn tại với email này chưa
+    const existingAdmin = await Admin.findOne({ email })
+    if (existingAdmin) {
+      return { success: false, message: 'Email này đã được sử dụng.' }
+    }
+
+    // Băm mật khẩu
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    // Tạo admin mới
+    const newAdmin = new Admin({
+      email,
+      password: hashedPassword
+    })
+
+    // Lưu admin vào cơ sở dữ liệu
+    const savedAdmin = await newAdmin.save()
+
+    return {
+      success: true,
+      data: {
+        id: savedAdmin._id,
+        email: savedAdmin.email
+      },
+      message: 'Đăng ký thành công.'
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng ký admin.',
+      error: error.message
+    }
+  }
+}
+
 export const authService = {
   registerService,
   loginService,
   logoutService,
-  checkCCCDService
+  checkCCCDService,
+  loginAdminService,
+  registerAdminService
 }

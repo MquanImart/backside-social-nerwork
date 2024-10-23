@@ -128,8 +128,44 @@ const logout = async (req, res) => {
     })
   }
 }
+
+const loginAdmin = async (req, res) => {
+  const { email, password } = req.body
+  const { success, data, message } = await authService.loginAdminService(
+    email,
+    password
+  )
+
+  if (success) {
+    return res.status(200).json({
+      success,
+      token: data.token,
+      user: data.user
+    })
+  } else {
+    return res.status(400).json({ success, message })
+  }
+}
+
+const registerAdmin = async (req, res) => {
+  const { email, password } = req.body
+
+  const response = await authService.registerAdminService({ email, password })
+
+  if (!response.success) {
+    return res.status(400).json({ message: response.message })
+  }
+
+  return res.status(201).json({
+    message: response.message,
+    data: response.data
+  })
+}
+
 export const authController = {
   registerUser,
+  loginAdmin,
+  registerAdmin,
   login,
   logout
 }

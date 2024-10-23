@@ -43,7 +43,59 @@ const getArticlesByCollectionIdService = async (userId, collectionId) => {
   return articles
 }
 
+const getAllUsersService = async () => {
+  try {
+    // Lấy tất cả người dùng từ cơ sở dữ liệu
+    const users = await User.find()
+
+    // Trả về danh sách người dùng
+    return users
+  } catch (error) {
+    throw new Error('Lỗi khi truy xuất người dùng: ' + error.message)
+  }
+}
+const lockUnlockUserService = async (userId, action) => {
+  try {
+    // Kiểm tra action có phải 'lock' hoặc 'unlock'
+    if (action !== 'lock' && action !== 'unlock') {
+      return {
+        success: false,
+        message: 'Invalid action. Use "lock" or "unlock".'
+      }
+    }
+
+    // Tìm người dùng theo userId
+    const user = await User.findById(userId)
+    if (!user) {
+      return { success: false, message: 'User not found.' }
+    }
+
+    // Cập nhật trạng thái tài khoản
+    const newStatus = action === 'lock' ? 'locked' : 'active'
+    user.status = newStatus
+    user.updatedAt = new Date()
+
+    // Lưu người dùng sau khi cập nhật
+    await user.save()
+
+    return {
+      success: true,
+      message: `User account ${
+        action === 'lock' ? 'locked' : 'unlocked'
+      } successfully.`,
+      status: user.status
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    }
+  }
+}
 export const userService = {
   getUserByIdService,
-  getArticlesByCollectionIdService
+  getArticlesByCollectionIdService,
+  getAllUsersService,
+  lockUnlockUserService
 }

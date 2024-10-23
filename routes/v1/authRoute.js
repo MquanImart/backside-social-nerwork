@@ -5,9 +5,8 @@ import { verifyToken } from '../../middlewares/verifyToken.js'
 
 const Router = express.Router()
 
-// Route đăng nhập
+// Route đăng nhập với user
 Router.post('/login', authController.login)
-
 // Route đăng ký với upload avatar và background
 Router.post(
   '/register',
@@ -20,5 +19,9 @@ Router.post(
 )
 
 Router.post('/logout', verifyToken, authController.logout)
+
+// Route đăng nhập với admin
+Router.post('/login-admin', authController.loginAdmin)
+Router.post('/register-admin', authController.registerAdmin)
 
 export const authRoute = Router
