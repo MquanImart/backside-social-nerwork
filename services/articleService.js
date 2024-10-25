@@ -53,9 +53,10 @@ const createArticleService = async ({
   userId
 }) => {
   try {
-    const user = await User.findById(userId)
+    const user = await User.findById(userId).select('_id firstName lastName avt displayName'); // Chỉ lấy các trường cần thiết từ user
+
     if (!user) {
-      throw new Error('Người dùng không tồn tại')
+      throw new Error('Người dùng không tồn tại');
     }
 
     const newArticle = new Article({
@@ -63,28 +64,35 @@ const createArticleService = async ({
       listPhoto,
       scope,
       hashTag,
-      interact: { emoticons: [], comment: [] },
+      interact: { emoticons: [], comment: [] }, // Đảm bảo khởi tạo mảng rỗng
       createdBy: userId,
       createdAt: new Date()
-    })
+    });
 
-    const savedArticle = await newArticle.save()
-
-    user.listArticle.push(savedArticle._id)
-    await user.save()
+    const savedArticle = await newArticle.save();
 
     return {
       ...savedArticle.toObject(),
       createdBy: {
         _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avt: user.avt,
         displayName: user.displayName || `${user.firstName} ${user.lastName}`
+      },
+      interact: {
+        emoticons: savedArticle.interact.emoticons || [], // Đảm bảo mảng rỗng nếu không có dữ liệu
+        comment: savedArticle.interact.comment || [] // Đảm bảo mảng rỗng nếu không có dữ liệu
       }
-    }
+    };
   } catch (error) {
-    console.error('Lỗi khi tạo bài viết:', error.message)
-    throw new Error(`Lỗi khi tạo bài viết: ${error.message}`)
+    console.error('Lỗi khi tạo bài viết:', error.message);
+    throw new Error(`Lỗi khi tạo bài viết: ${error.message}`);
   }
-}
+};
+
+
+
 
 const getAllArticlesWithCommentsService = async (userId) => {
   try {
@@ -224,64 +232,65 @@ const addCommentToArticleService = async ({
       img,
       createdAt: new Date(),
       updatedAt: new Date()
-    })
+    });
 
-    const savedComment = await newComment.save()
+    const savedComment = await newComment.save();
 
     const article = await Article.findById(postId).populate(
       'createdBy',
       'displayName avt'
-    )
-    if (!article) throw new Error('Bài viết không tồn tại')
+    );
+    if (!article) throw new Error('Bài viết không tồn tại');
 
-    article.interact.comment.push(savedComment._id)
-
-    article.totalComments = (article.totalComments || 0) + 1
-    article.updatedAt = new Date()
-
-    await article.save()
+    article.interact.comment.push(savedComment._id);
+    article.totalComments = (article.totalComments || 0) + 1;
+    article.updatedAt = new Date();
+    await article.save();
 
     const populatedComment = await Comment.findById(savedComment._id).populate(
       '_iduser',
       'displayName avt'
-    )
+    );
 
     // Phát sự kiện WebSocket thông báo bình luận mới (cho tất cả các client)
     emitEvent('new_comment', {
       postId,
       comment: populatedComment,
       totalComments: article.totalComments // Cập nhật số lượng bình luận
-    })
+    });
 
-    emitEvent('new_comment_notification', {
-      senderId: {
-        _id: _iduser,
-        displayName: populatedComment._iduser.displayName,
-        avt: populatedComment._iduser.avt
-          ? [populatedComment._iduser.avt]
-          : ['']
-      },
-      postId,
-      receiverId: article.createdBy._id,
-      message: `${populatedComment._iduser.displayName} đã bình luận về bài viết của bạn`,
-      commentId: savedComment._id,
-      createdAt: new Date()
-    })
+    // Chỉ gửi thông báo nếu người bình luận khác với người tạo bài viết
+    if (_iduser.toString() !== article.createdBy._id.toString()) {
+      emitEvent('new_comment_notification', {
+        senderId: {
+          _id: _iduser,
+          displayName: populatedComment._iduser.displayName,
+          avt: populatedComment._iduser.avt ? [populatedComment._iduser.avt] : ['']
+        },
+        postId,
+        receiverId: article.createdBy._id,
+        message: `${populatedComment._iduser.displayName} đã bình luận về bài viết của bạn`,
+        commentId: savedComment._id,
+        createdAt: new Date()
+      });
 
-    const notification = new Notification({
-      senderId: _iduser,
-      receiverId: article.createdBy._id,
-      message: `${populatedComment._iduser.displayName} đã bình luận về bài viết của bạn`,
-      status: 'unread',
-      createdAt: new Date()
-    })
-    await notification.save()
+      // Lưu thông báo vào database
+      const notification = new Notification({
+        senderId: _iduser,
+        receiverId: article.createdBy._id,
+        message: `${populatedComment._iduser.displayName} đã bình luận về bài viết của bạn`,
+        status: 'unread',
+        createdAt: new Date()
+      });
+      await notification.save();
+    }
 
-    return populatedComment
+    return populatedComment;
   } catch (error) {
-    throw new Error(`Lỗi khi thêm bình luận: ${error.message}`)
+    throw new Error(`Lỗi khi thêm bình luận: ${error.message}`);
   }
-}
+};
+
 
 // Service thêm phản hồi vào bình luận + socket thông báo rồi(chưa format lại thông báo) + chưa socket số comment
 const addReplyToCommentService = async ({
@@ -294,14 +303,14 @@ const addReplyToCommentService = async ({
     const article = await Article.findById(postId).populate({
       path: 'interact.comment',
       model: 'Comment'
-    })
-    if (!article) throw new Error('Bài viết không tồn tại')
+    });
+    if (!article) throw new Error('Bài viết không tồn tại');
 
     const comment = await Comment.findById(commentId).populate(
       '_iduser',
       'displayName avt'
-    )
-    if (!comment) throw new Error('Bình luận không tồn tại')
+    );
+    if (!comment) throw new Error('Bình luận không tồn tại');
 
     const newReply = new Comment({
       _iduser,
@@ -311,57 +320,61 @@ const addReplyToCommentService = async ({
       emoticons: [],
       createdAt: new Date(),
       updatedAt: new Date()
-    })
+    });
 
-    const savedReply = await newReply.save()
+    const savedReply = await newReply.save();
 
-    comment.replyComment.push(savedReply._id)
-    await comment.save()
+    comment.replyComment.push(savedReply._id);
+    await comment.save();
 
-    article.totalComments = (article.totalComments || 0) + 1
-    await article.save()
+    article.totalComments = (article.totalComments || 0) + 1;
+    await article.save();
 
     const populatedReply = await Comment.findById(savedReply._id).populate(
       '_iduser',
       'displayName avt'
-    )
+    );
 
     // Phát sự kiện WebSocket thông báo phản hồi mới (cho tất cả các client)
     emitEvent('new_reply', {
       postId,
       commentId,
-      reply: populatedReply, // Gửi phản hồi đã được populate dữ liệu
-      totalComments: article.totalComments // Cập nhật tổng số bình luận
-    })
+      reply: populatedReply,
+      totalComments: article.totalComments
+    });
 
-    emitEvent('new_reply_notification', {
-      senderId: {
-        _id: _iduser,
-        displayName: populatedReply._iduser.displayName,
-        avt: populatedReply._iduser.avt ? [populatedReply._iduser.avt] : ['']
-      },
-      commentId,
-      postId,
-      receiverId: comment._iduser._id,
-      message: `${populatedReply._iduser.displayName} đã trả lời bình luận của bạn`,
-      replyId: savedReply._id,
-      createdAt: new Date()
-    })
+    // Chỉ gửi thông báo nếu người trả lời khác với người tạo bình luận
+    if (_iduser.toString() !== comment._iduser._id.toString()) {
+      emitEvent('new_reply_notification', {
+        senderId: {
+          _id: _iduser,
+          displayName: populatedReply._iduser.displayName,
+          avt: populatedReply._iduser.avt ? [populatedReply._iduser.avt] : ['']
+        },
+        commentId,
+        postId,
+        receiverId: comment._iduser._id,
+        message: `${populatedReply._iduser.displayName} đã trả lời bình luận của bạn`,
+        replyId: savedReply._id,
+        createdAt: new Date()
+      });
 
-    const notification = new Notification({
-      senderId: _iduser,
-      receiverId: comment._iduser._id,
-      message: `${populatedReply._iduser.displayName} đã trả lời bình luận của bạn`,
-      status: 'unread',
-      createdAt: new Date()
-    })
-    await notification.save()
+      const notification = new Notification({
+        senderId: _iduser,
+        receiverId: comment._iduser._id,
+        message: `${populatedReply._iduser.displayName} đã trả lời bình luận của bạn`,
+        status: 'unread',
+        createdAt: new Date()
+      });
+      await notification.save();
+    }
 
-    return populatedReply
+    return populatedReply;
   } catch (error) {
-    throw new Error(`Lỗi khi thêm trả lời bình luận: ${error.message}`)
+    throw new Error(`Lỗi khi thêm trả lời bình luận: ${error.message}`);
   }
-}
+};
+
 
 // socket thông báo rồi(chưa format lại thông báo) + chưa socket số like
 const likeArticleService = async (postId, userId) => {
@@ -397,15 +410,15 @@ const reportArticleService = async (postId, userId, reason) => {
     const article = await Article.findById(postId).populate(
       'createdBy',
       'displayName avt'
-    )
-    if (!article) throw new Error('Bài viết không tồn tại.')
+    );
+    if (!article) throw new Error('Bài viết không tồn tại.');
 
     const existingReport = article.reports.find(
       (report) => report._idReporter.toString() === userId.toString()
-    )
+    );
 
     if (existingReport) {
-      throw new Error('Bạn đã báo cáo bài viết này trước đó.')
+      throw new Error('Bạn đã báo cáo bài viết này trước đó.');
     }
 
     article.reports.push({
@@ -413,37 +426,41 @@ const reportArticleService = async (postId, userId, reason) => {
       reason,
       reportDate: new Date(),
       status: 'pending'
-    })
+    });
 
-    await article.save()
+    await article.save();
 
-    emitEvent('article_reported', {
-      senderId: {
-        _id: userId,
-        displayName: 'Người dùng đã báo cáo'
-      },
-      articleId: postId,
-      reporter: userId,
-      reason: reason,
-      receiverId: article.createdBy._id,
-      message: `Bài viết của bạn đã bị báo cáo với lý do: ${reason}`,
-      createdAt: new Date()
-    })
+    // Kiểm tra nếu người báo cáo khác với người tạo bài viết, thì mới gửi thông báo
+    if (article.createdBy._id.toString() !== userId.toString()) {
+      emitEvent('article_reported', {
+        senderId: {
+          _id: userId,
+          displayName: 'Người dùng đã báo cáo'
+        },
+        articleId: postId,
+        reporter: userId,
+        reason: reason,
+        receiverId: article.createdBy._id,
+        message: `Bài viết của bạn đã bị báo cáo với lý do: ${reason}`,
+        createdAt: new Date()
+      });
 
-    const notification = new Notification({
-      senderId: userId,
-      receiverId: article.createdBy._id,
-      message: `Bài viết của bạn đã bị báo cáo với lý do: ${reason}`,
-      status: 'unread',
-      createdAt: new Date()
-    })
-    await notification.save()
+      const notification = new Notification({
+        senderId: userId,
+        receiverId: article.createdBy._id,
+        message: `Bài viết của bạn đã bị báo cáo với lý do: ${reason}`,
+        status: 'unread',
+        createdAt: new Date()
+      });
+      await notification.save();
+    }
 
-    return article
+    return article;
   } catch (error) {
-    throw new Error(`Không thể báo cáo bài viết: ${error.message}`)
+    throw new Error(`Không thể báo cáo bài viết: ${error.message}`);
   }
-}
+};
+
 
 const saveArticleService = async (postId, userId) => {
   try {
@@ -506,53 +523,53 @@ const editArticleService = async (postId, updatedContent, updatedScope) => {
 // socket thông báo rồi (chưa format lại thông báo)) + (chưa tính số like)
 const likeCommentService = async (commentId, userId) => {
   try {
-    const comment = await Comment.findById(commentId).populate('_iduser')
+    const comment = await Comment.findById(commentId).populate('_iduser');
     if (!comment) {
-      throw new Error('Bình luận không tồn tại.')
+      throw new Error('Bình luận không tồn tại.');
     }
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId);
     if (!user) {
-      throw new Error('Người dùng không tồn tại')
+      throw new Error('Người dùng không tồn tại');
     }
 
-    const displayName = user.displayName || 'Người dùng'
-    const avt =
-      user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : ''
+    const displayName = user.displayName || 'Người dùng';
+    const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
 
     const likedIndex = comment.emoticons.findIndex(
       (emoticon) =>
         emoticon._iduser.toString() === userId &&
         emoticon.typeEmoticons === 'like'
-    )
+    );
 
-    let action = ''
+    let action = '';
 
     if (likedIndex > -1) {
-      comment.emoticons.splice(likedIndex, 1)
-      comment.totalLikes -= 1
-      action = 'unlike'
+      comment.emoticons.splice(likedIndex, 1);
+      comment.totalLikes -= 1;
+      action = 'unlike';
     } else {
       comment.emoticons.push({
         _iduser: userId,
         typeEmoticons: 'like'
-      })
-      comment.totalLikes += 1
-      action = 'like'
+      });
+      comment.totalLikes += 1;
+      action = 'like';
     }
 
-    await comment.save()
+    await comment.save();
 
-    if (action === 'like') {
+    // Chỉ gửi thông báo nếu người thích bình luận khác với người đã tạo bình luận
+    if (action === 'like' && userId.toString() !== comment._iduser._id.toString()) {
       const notification = new Notification({
         senderId: userId,
         receiverId: comment._iduser._id,
         message: `${displayName} đã thích bình luận của bạn`,
         status: 'unread',
         createdAt: new Date()
-      })
+      });
 
-      await notification.save()
+      await notification.save();
 
       emitEvent('like_comment_notification', {
         senderId: {
@@ -565,7 +582,7 @@ const likeCommentService = async (commentId, userId) => {
         message: `${displayName} đã thích bình luận của bạn`,
         status: 'unread',
         createdAt: new Date()
-      })
+      });
     }
 
     // Phát sự kiện socket để cập nhật số like và trạng thái like/unlike
@@ -574,53 +591,51 @@ const likeCommentService = async (commentId, userId) => {
       totalLikes: comment.totalLikes,
       action: action,
       userId: userId
-    })
+    });
 
-    return comment
+    return comment;
   } catch (error) {
-    throw new Error(`Lỗi khi xử lý like bình luận: ${error.message}`)
+    throw new Error(`Lỗi khi xử lý like bình luận: ${error.message}`);
   }
-}
+};
+
 // socket thông báo rồi (chưa format lại thông báo)) + (chưa tính số like)
 const likeReplyCommentService = async (commentId, replyId, userId) => {
   try {
-    const reply = await Comment.findById(replyId).populate(
-      '_iduser',
-      'displayName avt'
-    )
-    if (!reply)
-      throw new Error('Không tìm thấy reply comment với ID đã cung cấp.')
+    const reply = await Comment.findById(replyId).populate('_iduser', 'displayName avt');
+    if (!reply) throw new Error('Không tìm thấy reply comment với ID đã cung cấp.');
 
-    const user = await User.findById(userId)
-    if (!user) throw new Error('Người dùng không tồn tại.')
+    const user = await User.findById(userId);
+    if (!user) throw new Error('Người dùng không tồn tại.');
 
-    const displayName = user.displayName || 'Người dùng'
+    const displayName = user.displayName || 'Người dùng';
 
     const isLiked = reply.emoticons.some(
       (emoticon) => emoticon._iduser.toString() === userId
-    )
+    );
 
-    let action = ''
+    let action = '';
 
     if (isLiked) {
       reply.emoticons = reply.emoticons.filter(
         (emoticon) => emoticon._iduser.toString() !== userId
-      )
-      reply.totalLikes -= 1
-      action = 'unlike'
+      );
+      reply.totalLikes -= 1;
+      action = 'unlike';
     } else {
       reply.emoticons.push({
         _iduser: userId,
         typeEmoticons: 'like',
         createdAt: new Date()
-      })
-      reply.totalLikes += 1
-      action = 'like'
+      });
+      reply.totalLikes += 1;
+      action = 'like';
     }
 
-    await reply.save()
+    await reply.save();
 
-    if (action === 'like') {
+    // Chỉ gửi thông báo nếu người thích khác với người tạo phản hồi
+    if (action === 'like' && userId.toString() !== reply._iduser._id.toString()) {
       emitEvent('like_reply_notification', {
         senderId: {
           _id: userId,
@@ -632,7 +647,7 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
         receiverId: reply._iduser._id,
         message: `${displayName} đã thích câu trả lời của bạn`,
         createdAt: new Date()
-      })
+      });
 
       const notification = new Notification({
         senderId: userId,
@@ -640,8 +655,8 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
         message: `${displayName} đã thích câu trả lời của bạn`,
         status: 'unread',
         createdAt: new Date()
-      })
-      await notification.save()
+      });
+      await notification.save();
     }
 
     // Phát sự kiện socket để cập nhật số like và trạng thái like/unlike
@@ -651,65 +666,60 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
       totalLikes: reply.totalLikes,
       action: action,
       userId: userId
-    })
+    });
 
-    return reply
+    return reply;
   } catch (error) {
-    throw new Error(`Lỗi khi xử lý like reply: ${error.message}`)
+    throw new Error(`Lỗi khi xử lý like reply: ${error.message}`);
   }
-}
+};
+
 
 // Service - shareArticleService
 const shareArticleService = async ({ postId, content, scope, userId }) => {
-  const user = await User.findById(userId)
-  if (!user) {
-    throw new Error('Người dùng không tồn tại')
-  }
-  if (!postId) {
-    return res.status(400).json({ message: 'Thiếu postId hoặc userId' })
-  }
-
-  const article = await Article.findById(postId).populate('createdBy')
-  if (!article) {
-    return res.status(404).json({ message: 'Bài viết không tồn tại' })
-  }
-
-  const newArticle = new Article({
-    content,
-    scope,
-    sharedPostId: postId,
-    createdBy: userId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    interact: {
-      emoticons: [],
-      comment: []
+  try {
+    const user = await User.findById(userId).select('_id firstName lastName avt displayName');
+    if (!user) {
+      throw new Error('Người dùng không tồn tại');
     }
-  })
 
-  const savedArticle = await newArticle.save()
-
-  const notification = new Notification({
-    senderId: userId,
-    receiverId: article.createdBy._id,
-    message: `${
-      user.displayName || `${user.firstName} ${user.lastName}`
-    } đã chia sẻ bài viết của bạn.`,
-    status: 'unread',
-    createdAt: new Date()
-  })
-
-  await notification.save()
-
-  return {
-    ...savedArticle.toObject(),
-    createdBy: {
-      _id: user._id,
-      displayName: user.displayName || `${user.firstName} ${user.lastName}`,
-      avt: user.avt ? user.avt[user.avt.length - 1] : ''
+    const article = await Article.findById(postId).populate('createdBy');
+    if (!article) {
+      throw new Error('Bài viết không tồn tại');
     }
+
+    const newArticle = new Article({
+      content,
+      scope,
+      sharedPostId: postId,
+      createdBy: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      interact: {
+        emoticons: [],
+        comment: []
+      }
+    });
+
+    const savedArticle = await newArticle.save();
+
+    // Trả về bài viết với định dạng mong muốn
+    return {
+      ...savedArticle.toObject(),
+      createdBy: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avt: user.avt ? user.avt[user.avt.length - 1] : '',
+        displayName: user.displayName || `${user.firstName} ${user.lastName}`
+      }
+    };
+  } catch (error) {
+    throw new Error(`Lỗi khi chia sẻ bài viết: ${error.message}`);
   }
-}
+};
+
+
 
 const getAllArticlesByUserService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {

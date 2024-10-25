@@ -106,72 +106,67 @@ const addReplyToComment = async (req, res) => {
 
 const likeArticle = async (req, res) => {
   try {
-    const { postId } = req.params
-    const { userId } = req.body
+    const { postId } = req.params;
+    const { userId } = req.body;
 
-    // Kiểm tra thông tin đầu vào
     if (!postId || !userId) {
-      return res.status(400).json({ message: 'Thiếu postId hoặc userId' })
+      return res.status(400).json({ message: 'Thiếu postId hoặc userId' });
     }
 
-    // Tìm bài viết theo ID
-    const article = await Article.findById(postId).populate('createdBy')
+    console.log("likeArticle called with postId:", postId, "and userId:", userId); // Kiểm tra số lần gọi
+
+    const article = await Article.findById(postId).populate('createdBy');
     if (!article) {
-      return res.status(404).json({ message: 'Bài viết không tồn tại' })
+      return res.status(404).json({ message: 'Bài viết không tồn tại' });
     }
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại' })
+      return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
 
-    const displayName = user.displayName || 'Người dùng'
-    const avt =
-      user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : ''
+    const displayName = user.displayName || 'Người dùng';
+    const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
 
-    // Kiểm tra xem người dùng đã like bài viết này chưa
     const likedIndex = article.interact.emoticons.findIndex(
       (emoticon) =>
         emoticon._iduser?.toString() === userId &&
         emoticon.typeEmoticons === 'like'
-    )
+    );
 
-    let action = '' // Biến để lưu hành động (like hoặc unlike)
+    let action = '';
 
     if (likedIndex > -1) {
-      // Nếu đã like, hủy like
-      article.interact.emoticons.splice(likedIndex, 1)
-      article.totalLikes = Math.max(article.totalLikes - 1, 0) // Giảm totalLikes, không cho phép nhỏ hơn 0
-      action = 'unlike' // Hành động là hủy like
+      article.interact.emoticons.splice(likedIndex, 1);
+      article.totalLikes = Math.max(article.totalLikes - 1, 0);
+      action = 'unlike';
     } else {
-      // Nếu chưa like, thêm like
       article.interact.emoticons.push({
         _iduser: userId,
         typeEmoticons: 'like',
         createdAt: new Date()
-      })
-      article.totalLikes = article.totalLikes + 1 // Tăng totalLikes
-      action = 'like' // Hành động là like
+      });
+      article.totalLikes += 1;
+      action = 'like';
     }
 
-    // Lưu bài viết sau khi cập nhật
-    await article.save()
+    await article.save();
 
-    // Phát sự kiện WebSocket để cập nhật số lượt thích cho tất cả các client
     emitEvent('update_article_likes', {
       postId,
-      totalLikes: article.totalLikes, // Số like hiện tại của bài viết
-      action: action, // Hành động like/unlike
-      userId: userId // ID của người thực hiện like/unlike
-    })
+      totalLikes: article.totalLikes,
+      action: action,
+      userId: userId
+    });
 
-    // Nếu hành động là like, phát sự kiện WebSocket và lưu thông báo
-    if (action === 'like') {
-      // Phát sự kiện WebSocket cho client về thông báo
+    // Chỉ tạo thông báo nếu userId khác với createdBy._id
+    if (action === 'like' && userId !== article.createdBy._id.toString()) {
+      console.log('Creating and sending notification'); // Log kiểm tra phát thông báo
+
       emitEvent('like_article_notification', {
         senderId: {
           _id: userId,
-          avt: avt ? [avt] : [''], // Gửi avatar của người like
+          avt: avt ? [avt] : [''],
           displayName: displayName
         },
         postId,
@@ -179,37 +174,36 @@ const likeArticle = async (req, res) => {
         message: `${displayName} đã thích bài viết của bạn`,
         status: 'unread',
         createdAt: new Date()
-      })
+      });
 
-      // Lưu thông báo vào database
       const newNotification = new Notification({
         senderId: userId,
         receiverId: article.createdBy._id,
         message: `${displayName} đã thích bài viết của bạn.`,
         status: 'unread',
         createdAt: new Date()
-      })
+      });
 
-      await newNotification.save()
+      await newNotification.save();
     }
 
     return res.status(200).json({
       message: action === 'like' ? 'Đã thích bài viết' : 'Đã bỏ thích bài viết',
-      totalLikes: article.totalLikes, // Trả về số lượng like hiện tại
+      totalLikes: article.totalLikes,
       action: action,
       article: article
-    })
+    });
   } catch (error) {
-    console.error('Lỗi trong quá trình xử lý like:', error)
-    return res
-      .status(500)
-      .json({ message: 'Đã xảy ra lỗi', error: error.message })
+    console.error('Lỗi trong quá trình xử lý like:', error);
+    return res.status(500).json({ message: 'Đã xảy ra lỗi', error: error.message });
   }
-}
+};
+
+
 
 const shareArticle = async (req, res) => {
-  const { postId } = req.params
-  const { content, scope, userId } = req.body // Lấy nội dung, phạm vi và userId từ request body
+  const { postId } = req.params;
+  const { content, scope, userId } = req.body; // Lấy nội dung, phạm vi và userId từ request body
 
   try {
     // Gọi service để chia sẻ bài viết
@@ -218,50 +212,52 @@ const shareArticle = async (req, res) => {
       content,
       scope,
       userId
-    })
+    });
 
     // Tìm bài viết gốc và người dùng
-    const article = await Article.findById(postId).populate('createdBy')
+    const article = await Article.findById(postId).populate('createdBy');
     if (!article) {
-      return res.status(404).json({ message: 'Bài viết không tồn tại' })
+      return res.status(404).json({ message: 'Bài viết không tồn tại' });
     }
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại' })
+      return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
 
     // Lấy displayName và avatar của người dùng
-    const displayName = user.displayName || 'Người dùng'
-    const avt =
-      user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : ''
+    const displayName = user.displayName || 'Người dùng';
+    const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
 
-    // Phát sự kiện WebSocket để thông báo chia sẻ bài viết
-    emitEvent('share_notification', {
-      senderId: {
-        _id: userId,
-        avt: avt ? [avt] : [''], // Gửi avatar của người chia sẻ
-        displayName
-      },
-      postId,
-      receiverId: article.createdBy._id,
-      message: `${displayName} đã chia sẻ bài viết của bạn`,
-      status: 'unread',
-      createdAt: new Date()
-    })
+    // Chỉ phát thông báo nếu người chia sẻ không phải là người tạo bài viết
+    if (userId !== article.createdBy._id.toString()) {
+      emitEvent('share_notification', {
+        senderId: {
+          _id: userId,
+          avt: avt ? [avt] : [''], // Gửi avatar của người chia sẻ
+          displayName
+        },
+        postId,
+        receiverId: article.createdBy._id,
+        message: `${displayName} đã chia sẻ bài viết của bạn`,
+        status: 'unread',
+        createdAt: new Date()
+      });
+    }
 
     return res.status(201).json({
       message: 'Bài viết đã được chia sẻ thành công',
       post: sharedArticle
-    })
+    });
   } catch (error) {
-    console.error('Lỗi khi chia sẻ bài viết:', error)
+    console.error('Lỗi khi chia sẻ bài viết:', error);
     return res.status(500).json({
       message: 'Đã xảy ra lỗi khi chia sẻ bài viết',
       error: error.message
-    })
+    });
   }
-}
+};
+
 
 const reportArticle = async (req, res) => {
   try {
