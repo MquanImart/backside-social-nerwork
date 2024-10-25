@@ -84,6 +84,23 @@ const getAllFriendByIdUser = async (req, res) => {
       res.status(500).json({ error: 'Failed to create conversation' });
     }
   };
+
+  const unFriend = async (req, res) => {
+    const { userId } = req.params
+    const friendId = req.query.friendId;
+    try {
+      const result = await friendService.unFriend(
+        userId,
+        friendId
+      )
+  
+      return res.status(200).json(result)
+    } catch (error) {
+      console.error('Lỗi:', error)
+      return res.status(500).json({ msg: 'Lỗi server' })
+    }
+  }
+
 export const friendController = {
     getAllFriendByIdUser,
     getSuggestAddFriend,
@@ -91,5 +108,6 @@ export const friendController = {
     getAllFriendRequest,
     updateSatusFriendRequest,
     getMyRequest,
-    revokeInvitation
+    revokeInvitation,
+    unFriend
 }
