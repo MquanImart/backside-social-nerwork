@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema({
     phoneNumber: String,
     address: String,
     gender: Boolean,
-    birthDate: Date
+    birthDate: Date 
   },
   friends: [friendSchema],
   status: { type: String, default: 'active' },
@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema({
   groups: [String],
   follow: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
   backGround: [String],
+  cccdUrl: String,
   aboutMe: String,
   hobbies: [String],
   listArticle: [String],
