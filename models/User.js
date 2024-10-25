@@ -40,6 +40,7 @@ const userSchema = new mongoose.Schema({
   avt: [String],
   collections: [collectionSchema],
   groups: [String],
+  follow: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
   backGround: [String],
   cccdUrl: String,
   aboutMe: String,

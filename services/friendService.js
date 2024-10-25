@@ -77,7 +77,7 @@ const getSuggestAddFriend= async (userId, page) => {
     }
 }
 
-const addFriend= async (senderId, receiverId) => {
+const addFriend = async (senderId, receiverId) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(senderId)) {
             throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
@@ -255,6 +255,34 @@ const revokeInvitation = async (requestId) => {
   }
 }
 
+const unFriend = async (userId, friendId) => {
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+  }
+  if (!mongoose.Types.ObjectId.isValid(friendId)) {
+    throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+  }
+
+  const user = await User.findById(userId).select('-_destroy -__v');
+  const myFriend = await User.findById(friendId).select('-_destroy -__v');
+
+  if (user === null){
+    throw new Error('Người dùng không tồn tại')
+  }
+
+  if (myFriend === null){
+    throw new Error('Người dùng không tồn tại')
+  }
+
+  user.friends = user.friends.filter(friend => !friend.idUser.equals(friendId));
+  await user.save();
+  myFriend.friends = myFriend.friends.filter(friend => !friend.idUser.equals(userId));
+  await myFriend.save()
+  
+  return true;
+}
+
 export const friendService = {
     getAllFriendByIdUser,
     getSuggestAddFriend,
@@ -263,4 +291,5 @@ export const friendService = {
     updateSatusFriendRequest,
     getMyRequest,
     revokeInvitation,
+    unFriend
 }
