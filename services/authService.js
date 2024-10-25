@@ -31,6 +31,8 @@ const checkCCCDService = async (cccdFile) => {
   try {
     const API_ENDPOINT = env.API_ENDPOINT_CCCD
     const API_KEY = env.API_KEY_CCCD
+    console.log(API_ENDPOINT)
+    console.log(API_KEY)
 
     const formData = new FormData()
     formData.append(
@@ -279,11 +281,11 @@ const loginAdminService = async (email, password) => {
     const token = jwt.sign(
       {
         id: admin._id,
-        email: admin.email,
+        email: admin.email, 
         role: 'admin' // Thêm vai trò admin vào token
       },
-      env.JWT_SECRET,
-      { expiresIn: '2h' }
+      env.JWT_SECRET, 
+      { expiresIn: '2h' } 
     )
 
     return {
