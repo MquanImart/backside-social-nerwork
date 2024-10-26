@@ -76,7 +76,6 @@ const deleteCollectionService = async (userId, collectionId) => {
   )
 
   if (collectionIndex === -1) {
-    console.log('Danh sách bộ sưu tập:', user.collections) // Log để kiểm tra
     throw new Error('Bộ sưu tập không tồn tại')
   }
 

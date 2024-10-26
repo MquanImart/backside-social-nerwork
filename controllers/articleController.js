@@ -51,21 +51,23 @@ const createArticle = async (req, res) => {
 
 const getAllArticlesWithComments = async (req, res) => {
   try {
-    const userId = req.query.userId || req.user._id // Lấy userId từ query params hoặc từ xác thực nếu có
+    const userId = req.query.userId || req.user._id;
+    const page = parseInt(req.query.page) || 1; // Số trang, mặc định là 1
+    const limit = parseInt(req.query.limit) || 10; // Số bài viết mỗi lần tải, mặc định là 10
+
     if (!userId) {
-      return res.status(400).json({ message: 'Thiếu userId' }) // Nếu không có userId, trả về lỗi
+      return res.status(400).json({ message: 'Thiếu userId' });
     }
 
-    // Gọi service để lấy danh sách bài viết kèm bình luận
-    const articles = await articleService.getAllArticlesWithCommentsService(
-      userId
-    )
+    // Gọi service để lấy danh sách bài viết kèm bình luận và phân trang
+    const articles = await articleService.getAllArticlesWithCommentsService(userId, page, limit);
 
-    res.status(200).json(articles)
+    res.status(200).json(articles);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
-}
+};
+
 // Xóa bài viết
 const deleteArticle = async (req, res) => {
   try {
@@ -113,7 +115,6 @@ const likeArticle = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu postId hoặc userId' });
     }
 
-    console.log("likeArticle called with postId:", postId, "and userId:", userId); // Kiểm tra số lần gọi
 
     const article = await Article.findById(postId).populate('createdBy');
     if (!article) {
@@ -161,7 +162,6 @@ const likeArticle = async (req, res) => {
 
     // Chỉ tạo thông báo nếu userId khác với createdBy._id
     if (action === 'like' && userId !== article.createdBy._id.toString()) {
-      console.log('Creating and sending notification'); // Log kiểm tra phát thông báo
 
       emitEvent('like_article_notification', {
         senderId: {
@@ -295,12 +295,6 @@ const saveArticle = async (req, res) => {
         .json({ message: 'Thiếu thông tin postId hoặc userId' })
     }
 
-    console.log(
-      'Yêu cầu lưu bài viết với postId:',
-      postId,
-      'và userId:',
-      userId
-    )
 
     const updatedCollection = await articleService.saveArticleService(
       postId,

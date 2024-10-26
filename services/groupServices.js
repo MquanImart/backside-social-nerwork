@@ -18,87 +18,86 @@ const getUserGroupsService = async (userId) => {
 }
 
 // Service lấy tất cả bài viết từ các nhóm mà người dùng đã tham gia và được duyệt
-const getAllGroupArticlesService = async (userId) => {
+
+const getAllGroupArticlesService = async (userId, page, limit) => {
   try {
-    // Kiểm tra nếu userId không hợp lệ
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new Error('ID người dùng không hợp lệ.')
+      throw new Error('ID người dùng không hợp lệ.');
     }
 
-    // Tìm các nhóm mà người dùng đã được chấp nhận tham gia
     const userGroups = await Group.find({
       'members.listUsers': {
-        $elemMatch: {
-          idUser: userId,
-          state: 'accepted' // Chỉ lấy nhóm người dùng đã được chấp nhận
-        }
+        $elemMatch: { idUser: userId, state: 'accepted' },
+      },
+    }).select('article');
+
+    if (!userGroups || userGroups.length === 0) return [];
+
+    const processedArticleIds = userGroups.reduce((acc, group) => {
+      if (group.article && Array.isArray(group.article.listArticle)) {
+        const groupArticles = group.article.listArticle
+          .filter((article) => article.state === 'processed')
+          .map((article) => article.idArticle);
+        return acc.concat(groupArticles);
       }
-    }).select('article groupName')
+      return acc;
+    }, []);
 
-    console.log('userGroups', userGroups)
+    if (processedArticleIds.length === 0) return [];
 
-    // Nếu người dùng không thuộc nhóm nào, trả về mảng rỗng
-    if (!userGroups || userGroups.length === 0) {
-      return []
-    }
+    console.log(`Tổng số bài viết đã xử lý: ${processedArticleIds.length}`);
+    
+    const skip = (page - 1) * limit;
+    console.log(`Trang ${page} với skip: ${skip}, limit: ${limit}`);
 
-    // Lọc bài viết đã được xử lý (state === 'processed') từ các nhóm của người dùng
-    const processedArticles = userGroups.reduce((acc, group) => {
-      const groupArticles = group.article.listArticle
-        .filter((article) => article.state === 'processed') // Lọc bài viết đã được xử lý
-        .map((article) => article.idArticle)
-      return acc.concat(groupArticles)
-    }, [])
-
-    console.log('Processed Articles:', processedArticles)
-
-    // Nếu không có bài viết nào được xử lý, trả về mảng rỗng
-    if (processedArticles.length === 0) {
-      return []
-    }
-
-    // Tìm các bài viết dựa trên danh sách ID của các bài đã được xử lý
     const articles = await Article.find({
-      _id: { $in: processedArticles }, // Chỉ tìm các bài viết có trong danh sách đã lọc
-      _destroy: { $exists: false } // Lọc các bài viết chưa bị xóa
+      _id: { $in: processedArticleIds },
+      _destroy: { $exists: false },
     })
-      .populate('createdBy', 'firstName lastName displayName avt') // Lấy thông tin người tạo bài viết
-      .populate('groupID', 'groupName avt backGround') // Lấy thông tin về nhóm của bài viết
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('createdBy', 'firstName lastName displayName avt')
+      .populate('groupID', 'groupName avt backGround')
       .populate({
         path: 'interact.comment',
         model: 'Comment',
         populate: [
-          { path: '_iduser', select: 'firstName lastName displayName avt' }, // Lấy thông tin người bình luận
+          { path: '_iduser', select: 'firstName lastName displayName avt' },
           {
             path: 'replyComment',
             model: 'Comment',
-            populate: {
-              path: '_iduser',
-              select: 'firstName lastName displayName avt'
-            }
-          }
-        ]
+            populate: { path: '_iduser', select: 'firstName lastName displayName avt' },
+          },
+        ],
       })
-      .lean() // Chuyển đổi kết quả thành đối tượng JavaScript thông thường để dễ dàng xử lý
+      .lean();
 
-    // Nếu không có bài viết nào được tìm thấy, trả về mảng rỗng
-    if (!articles || articles.length === 0) {
-      return []
-    }
+    console.log(`Số bài viết trả về (Trang ${page}): ${articles.length}`);
+    articles.forEach((article, index) => {
+      console.log(`Bài viết ${index + 1} (Page ${page}): ID: ${article._id}, Nội dung: ${article.content}`);
+    });
 
-    // Tính toán và trả về bài viết với thông tin bổ sung về lượt thích và bình luận
-    const enrichedArticles = articles.map((article) => ({
+    return articles.map((article) => ({
       ...article,
-      totalLikes: article.totalLikes || 0, // Đảm bảo totalLikes không undefined
-      totalComments: article.totalComments || 0 // Đảm bảo totalComments không undefined
-    }))
-
-    return enrichedArticles
+      totalLikes: article.totalLikes || 0,
+      totalComments: article.totalComments || 0,
+    }));
   } catch (error) {
-    console.error('Lỗi khi lấy bài viết của nhóm:', error)
-    throw new Error('Lỗi khi lấy bài viết của nhóm.')
+    console.error('Lỗi khi lấy bài viết của nhóm:', error);
+    throw new Error('Lỗi khi lấy bài viết của nhóm.');
   }
-}
+};
+
+
+
+
+
+
+
+
+
+
 
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
@@ -1146,8 +1145,6 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
     ) {
       throw new Error('ID người dùng hoặc nhóm không hợp lệ')
     }
-    console.log('userId', userId)
-    console.log('Bạn bè', invitedFriends)
     // Lấy thông tin nhóm
     const group = await Group.findById(groupId)
     if (!group) {

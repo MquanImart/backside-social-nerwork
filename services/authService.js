@@ -31,8 +31,6 @@ const checkCCCDService = async (cccdFile) => {
   try {
     const API_ENDPOINT = env.API_ENDPOINT_CCCD
     const API_KEY = env.API_KEY_CCCD
-    console.log(API_ENDPOINT)
-    console.log(API_KEY)
 
     const formData = new FormData()
     formData.append(
@@ -49,7 +47,6 @@ const checkCCCDService = async (cccdFile) => {
     })
 
     const data = response.data
-    console.log('API Response:', data)
 
     if (!data.data || data.data.length === 0) {
       return {

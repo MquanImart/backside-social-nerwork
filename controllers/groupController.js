@@ -22,19 +22,20 @@ const getUserGroups = async (req, res) => {
 }
 
 const getAllGroupArticles = async (req, res) => {
-  const { userId } = req.params
+  const { userId } = req.params;
+  const { page = 1, limit = 10 } = req.query;
 
   try {
-    // Gọi service để lấy dữ liệu
-    const articles = await groupService.getAllGroupArticlesService(userId)
-
-    // Trả về danh sách bài viết với thông tin đã được xử lý
-    res.status(200).json(articles)
+    const articles = await groupService.getAllGroupArticlesService(userId, parseInt(page), parseInt(limit));
+    res.status(200).json({
+      articles,
+      hasMore: articles.length === limit, // Trả về `hasMore` chính xác khi đủ dữ liệu để tải thêm
+    });
   } catch (error) {
-    // Xử lý lỗi và gửi thông báo lỗi cho client
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: error.message });
   }
-}
+};
+
 
 const getNotJoinedGroups = async (req, res) => {
   try {
@@ -49,9 +50,6 @@ const getNotJoinedGroups = async (req, res) => {
 
 const createGroup = async (req, res) => {
   try {
-    // Log `req.files` để kiểm tra xem tệp có được gửi lên không
-    console.log('req.files:', req.files) // Log để kiểm tra xem các tệp có được truyền lên không
-    console.log('req.body:', req.body) // Kiểm tra các trường khác
 
     const { groupName, type, idAdmin, introduction, hobbies, rule } = req.body
 
@@ -71,14 +69,12 @@ const createGroup = async (req, res) => {
 
     if (req.files?.avt) {
       avtUrl = await cloudStorageService.uploadImageToStorage(req.files.avt[0])
-      console.log('Uploaded avt URL:', avtUrl) // Log URL sau khi upload
     }
 
     if (req.files?.backGround) {
       backGroundUrl = await cloudStorageService.uploadImageToStorage(
         req.files.backGround[0]
       )
-      console.log('Uploaded background URL:', backGroundUrl) // Log URL sau khi upload
     }
 
     // Gọi service để tạo nhóm
@@ -92,8 +88,6 @@ const createGroup = async (req, res) => {
       hobbies: hobbiesArray,
       rule: ruleArray
     })
-
-    console.log('New group data:', newGroup) // Log thông tin nhóm mới tạo
     return res
       .status(201)
       .json({ message: 'Nhóm được tạo thành công!', group: newGroup })
@@ -146,7 +140,6 @@ const createGroupArticle = async (req, res) => {
         )
       : []
 
-    console.log('URLs các ảnh đã tải lên:', listPhoto)
 
     // Gọi Service để tạo bài viết mới
     const savedArticle = await groupService.createArticleService({

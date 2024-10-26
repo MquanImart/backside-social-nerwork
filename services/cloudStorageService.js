@@ -14,7 +14,6 @@ const uploadImageToStorage = async (file) => {
   const fileName = `${Date.now()}_${file.originalname}`
   const fileUpload = bucket.file(fileName)
 
-  console.log('Uploading file:', fileName) // Log tên file đang upload
 
   return new Promise((resolve, reject) => {
     const blobStream = fileUpload.createWriteStream({
@@ -28,7 +27,6 @@ const uploadImageToStorage = async (file) => {
 
     blobStream.on('finish', () => {
       const fileUrl = `https://storage.googleapis.com/${bucket.name}/${fileUpload.name}     `
-      console.log('File uploaded successfully:', fileUrl) // Log URL sau khi upload thành công
       resolve(fileUrl)
     })
 
@@ -45,7 +43,6 @@ const uploadImageUserToStorage = async (file, userId, folderType) => {
   }`
   const fileUpload = bucket.file(fileName)
 
-  console.log('Uploading file:', fileName) // Log tên file đang upload
 
   return new Promise((resolve, reject) => {
     const blobStream = fileUpload.createWriteStream({
@@ -59,7 +56,6 @@ const uploadImageUserToStorage = async (file, userId, folderType) => {
 
     blobStream.on('finish', () => {
       const fileUrl = `https://storage.googleapis.com/${bucket.name}/${fileUpload.name}`
-      console.log('File uploaded successfully:', fileUrl) // Log URL sau khi upload thành công
       resolve(fileUrl)
     })
 

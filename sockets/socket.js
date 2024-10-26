@@ -11,11 +11,7 @@ export const initSocket = (server) => {
   })
 
   io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`)
-
-    // Xử lý khi người dùng ngắt kết nối
     socket.on('disconnect', () => {
-      console.log(`User disconnected: ${socket.id}`)
     })
   })
 }
@@ -23,7 +19,6 @@ export const initSocket = (server) => {
 // Hàm để phát ra sự kiện từ các nơi khác trong ứng dụng
 export const emitEvent = (event, data) => {
   if (io) {
-    console.log(`Emitting event: ${event}`, data) // Add a log to ensure this is being called
     io.emit(event, data) // Emit event to all connected clients
   } else {
     console.error('Socket.io is not initialized')

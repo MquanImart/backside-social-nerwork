@@ -39,7 +39,6 @@ Router.post(
     { name: 'backGround', maxCount: 1 }
   ]),
   (req, res, next) => {
-    console.log('Multer processed files:', req.files)
     next()
   },
   groupController.createGroup

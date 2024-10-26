@@ -94,39 +94,42 @@ const createArticleService = async ({
 
 
 
-const getAllArticlesWithCommentsService = async (userId) => {
+const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+      throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.');
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId)
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const user = await User.findById(userObjectId).populate({
       path: 'friends',
       populate: { path: 'idUser', select: '_id' }
-    })
+    });
 
-    if (!user) throw new Error('Người dùng không tồn tại')
+    if (!user) throw new Error('Người dùng không tồn tại');
 
     const friendIds = user.friends
       ? user.friends.map((friend) => {
           if (friend && friend.idUser && friend.idUser._id) {
-            const friendId = friend.idUser._id.toString()
+            const friendId = friend.idUser._id.toString();
             if (mongoose.Types.ObjectId.isValid(friendId)) {
-              return new mongoose.Types.ObjectId(friendId)
+              return new mongoose.Types.ObjectId(friendId);
             }
           }
-          return null
+          return null;
         })
-      : []
+      : [];
 
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
       'members.listUsers.state': 'processed'
-    })
+    });
 
-    const groupIds = groups.map((group) => group._id)
+    const groupIds = groups.map((group) => group._id);
+
+    // Tính toán skip cho việc phân trang
+    const skip = (page - 1) * limit;
 
     const articles = await Article.find({
       $and: [
@@ -151,6 +154,8 @@ const getAllArticlesWithCommentsService = async (userId) => {
         }
       ]
     })
+      .skip(skip) // Bỏ qua số bài viết theo phân trang
+      .limit(limit) // Lấy số lượng bài viết tối đa theo phân trang
       .populate({
         path: 'createdBy',
         select: 'firstName lastName displayName avt'
@@ -174,18 +179,22 @@ const getAllArticlesWithCommentsService = async (userId) => {
         path: 'groupID',
         select: 'groupName avt backGround'
       })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1 });
 
     if (!articles || articles.length === 0) {
-      return []
+      return { articles: [], hasMore: false };
     }
 
-    return articles
+    // Kiểm tra nếu còn bài viết để tải (nếu số bài viết trả về ít hơn `limit` thì không còn bài viết nào nữa)
+    const hasMore = articles.length === limit;
+
+    return { articles, hasMore };
   } catch (error) {
-    console.error('Lỗi khi lấy bài viết:', error.message)
-    throw new Error('Lỗi khi lấy bài viết.')
+    console.error('Lỗi khi lấy bài viết:', error.message);
+    throw new Error('Lỗi khi lấy bài viết.');
   }
-}
+};
+
 
 // Service xóa bài viết
 const deleteArticleService = async (articleId) => {

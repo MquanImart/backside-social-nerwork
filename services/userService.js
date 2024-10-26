@@ -44,8 +44,6 @@ const getArticlesByCollectionIdService = async (userId, collectionId) => {
     throw new Error('Bộ sưu tập không tồn tại')
   }
 
-  // Log the collection items to verify
-  console.log('Collection Items:', collection.items)
 
   // Convert string IDs to ObjectId using 'new'
   const articleIds = collection.items.map(
@@ -54,9 +52,6 @@ const getArticlesByCollectionIdService = async (userId, collectionId) => {
 
   // Lấy danh sách bài viết theo items trong bộ sưu tập
   const articles = await Article.find({ _id: { $in: articleIds } })
-
-  // Log the fetched articles
-  console.log('Fetched Articles:', articles)
 
   return articles
 }
@@ -86,10 +81,8 @@ const followUser = async (userId, followerId) => {
     // Lưu user sau khi cập nhật
     await user.save()
 
-    console.log('Follower added successfully!')
     return getUserByIdService(userId);
   } else {
-    console.log('Follower already exists!')
   }
 }
 
@@ -112,10 +105,8 @@ const unFollowUser = async (userId, followerId) => {
     user.follow = user.follow.filter(id => id.toString() !== followerId.toString());
     await user.save();
 
-    console.log('Follower removed successfully!');
     return getUserByIdService(userId);
   } else {
-      console.log('Follower does not exist!');
   }
 }
 
