@@ -81,9 +81,39 @@ const RelationShip = async (req, res) => {
   }
 }
 
+const getUserDataFriends = async (req, res) => {
+  const { userId } = req.params
+  try {
+    const result = await userService.getUserDataFriends(
+      userId
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
+const getUserDataFollower = async (req, res) => {
+  const { userId } = req.params
+  try {
+    const result = await userService.getUserDataFollower(
+      userId
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
 export const userController = {
   getUserById,
   getArticlesByCollectionId,
   followUser, unFollowUser,
-  RelationShip
+  RelationShip,
+  getUserDataFriends,
+  getUserDataFollower
 }

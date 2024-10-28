@@ -153,9 +153,43 @@ const RelationShip = async (userId, friendId) => {
   return result;
 }
 
+const getUserDataFriends = async (userId) => {
+  const user = await User.findById(userId).select('friends');
+
+  const result = await Promise.all(user.friends.map(async (friend) => {
+        const friendData = await User.findById(friend.idUser);
+        
+        return {
+            _id: friendData._id,
+            avt: friendData.avt,
+            name: friendData.displayName ? friendData.displayName : friendData.userName
+        };
+    }));
+
+  return result;
+}
+
+const getUserDataFollower = async (userId) => {
+  const user = await User.findById(userId).select('follow');
+
+  const result = await Promise.all(user.follow.map(async (_idUser) => {
+        const friendData = await User.findById(_idUser);
+        
+        return {
+            _id: friendData._id,
+            avt: friendData.avt,
+            name: friendData.displayName ? friendData.displayName : friendData.userName
+        };
+    }));
+    
+  return result;
+}
+
 export const userService = {
   getUserByIdService,
   getArticlesByCollectionIdService,
   followUser, unFollowUser,
   RelationShip,
+  getUserDataFriends,
+  getUserDataFollower
 }

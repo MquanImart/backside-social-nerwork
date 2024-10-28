@@ -14,5 +14,8 @@ Router.get(
   '/:userId/collections/:collectionId/articles',
   userController.getArticlesByCollectionId
 )
+Router.get('/:userId/friends-data', userController.getUserDataFriends)
+Router.get('/:userId/follower-data', userController.getUserDataFollower)
+
 
 export const userRoute = Router
