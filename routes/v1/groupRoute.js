@@ -73,7 +73,7 @@ Router.post('/:groupId/invite/reject', groupController.rejectInvite)
 Router.get('/:groupId/available-members', groupController.getAvailableMembers)
 Router.post('/:groupId/cancel-invite', groupController.cancelInvite)
 Router.get('/:groupId/pending-invites', groupController.getPendingInvites)
-// API lấy danh sách quản trị viên đã được duyệt 
+// API lấy danh sách quản trị viên đã được duyệt
 Router.get(
   '/:groupId/accepted-admins',
   groupController.getAcceptedAdministrators
@@ -113,5 +113,12 @@ Router.put(
 Router.delete('/:groupId/delete', groupController.deleteGroup)
 //API rời nhóm
 Router.post('/:groupId/leave', groupController.leaveGroup)
+// API để lấy danh sách bạn bè chưa tham gia nhóm
+Router.get(
+  '/friends-not-in-group/:userId/:groupId',
+  groupController.getFriendsNotInGroup
+)
+// Gửi lời mời tham gia nhóm và gửi thông báo (group --> người dùng)
+Router.post('/invite-member', groupController.inviteFriendsToGroup)
 
 export const groupRoute = Router

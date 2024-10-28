@@ -5,9 +5,14 @@ const fetchNotifications = async (userId) => {
     const notifications = await Notification.find({
       receiverId: userId,
       _destroy: null // Chỉ lấy các thông báo mà _destroy là null (chưa bị xoá mềm)
-    }).sort({
-      createdAt: -1
     })
+      .populate({
+        path: 'senderId', // Populate thông tin người gửi
+        select: 'displayName avt' // Chỉ lấy displayName và avt (avatar)
+      })
+      .sort({
+        createdAt: -1
+      })
 
     return notifications
   } catch (error) {

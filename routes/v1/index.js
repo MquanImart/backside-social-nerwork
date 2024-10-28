@@ -8,6 +8,8 @@ import { messagesRoute } from './messagesRoutes.js'
 import { notificationRoute } from './notificationRoute.js'
 import { friendRoute } from './friendRoute.js'
 import { verifyToken } from '../..//middlewares/verifyToken.js'
+import { verifyAdmin } from '../..//middlewares/verifyToken.js'
+import { adminRoute } from './adminRoute.js'
 import { collectionRoute } from './collectionRoutes.js'
 
 const Router = express.Router()
@@ -20,6 +22,7 @@ Router.use('/user', verifyToken, userRoute)
 Router.use('/messages', verifyToken, messagesRoute)
 Router.use('/notifications', verifyToken, notificationRoute)
 Router.use('/friends', verifyToken, friendRoute)
+Router.use('/admin', verifyAdmin, adminRoute)
 Router.use('/collections', verifyToken, collectionRoute)
 
 export const APIs_V1 = Router

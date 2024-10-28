@@ -10,6 +10,10 @@ Router.get('/:userId/collections/:collectionId/articles', userController.getArti
 Router.put('/:userId/follow', userController.followUser)
 Router.put('/:userId/unfollow', userController.unFollowUser)
 Router.get('/:userId/relationship', userController.RelationShip)
+Router.get(
+  '/:userId/collections/:collectionId/articles',
+  userController.getArticlesByCollectionId
+)
 Router.get('/:userId/friends-data', userController.getUserDataFriends)
 Router.get('/:userId/follower-data', userController.getUserDataFollower)
 

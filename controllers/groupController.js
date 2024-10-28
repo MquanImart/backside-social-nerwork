@@ -265,6 +265,7 @@ const getGroupMembers = async (req, res) => {
     return res.status(500).json({ message: 'Lỗi server', error: error.message })
   }
 }
+
 const removeMember = async (req, res) => {
   try {
     const { groupId, memberId } = req.params
@@ -777,6 +778,45 @@ const leaveGroup = async (req, res) => {
   }
 }
 
+const getFriendsNotInGroup = async (req, res) => {
+  const { userId, groupId } = req.params
+
+  try {
+    // Gọi service để lấy danh sách bạn bè chưa tham gia nhóm
+    const friends = await groupService.getFriendsNotInGroupService(
+      userId,
+      groupId
+    )
+
+    // Trả về danh sách bạn bè chưa tham gia nhóm
+    res.status(200).json(friends)
+  } catch (error) {
+    // Xử lý lỗi và gửi thông báo lỗi cho client
+    res.status(500).json({ message: error.message })
+  }
+}
+
+const inviteFriendsToGroup = async (req, res) => {
+  const { groupId, invitedFriends, userId } = req.body
+  try {
+    // Gọi service để xử lý lời mời và gửi thông báo
+    const result = await groupService.inviteFriendsToGroupService(
+      userId,
+      groupId,
+      invitedFriends
+    )
+
+    // Trả về kết quả
+    res.status(200).json({
+      message: 'Lời mời đã được gửi và thông báo thành công',
+      invitedFriends: result
+    })
+  } catch (error) {
+    // Xử lý lỗi và gửi thông báo lỗi cho client
+    res.status(500).json({ message: error.message })
+  }
+}
+
 export const groupController = {
   getUserGroups,
   getAllGroupArticles,
@@ -808,5 +848,7 @@ export const groupController = {
   revokeRequest,
   editGroup,
   deleteGroup,
-  leaveGroup
+  leaveGroup,
+  getFriendsNotInGroup,
+  inviteFriendsToGroup
 }

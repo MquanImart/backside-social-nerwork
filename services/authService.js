@@ -1,10 +1,94 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import Admin from '../models/Admin.js'
 import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
+import axios from 'axios'
+import FormData from 'form-data'
+import { Readable } from 'stream'
 
-// Service thực hiện logic đăng ký người dùng
+// Convert buffer to readable stream
+const bufferToStream = (buffer) => {
+  const readable = new Readable()
+  readable.push(buffer)
+  readable.push(null)
+  return readable
+}
+// Calculate age based on birthDate
+const calculateAge = (birthDate) => {
+  const today = new Date()
+  const birth = new Date(birthDate)
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--
+  }
+  return age
+}
+
+const checkCCCDService = async (cccdFile) => {
+  try {
+    const API_ENDPOINT = env.API_ENDPOINT_CCCD
+    const API_KEY = env.API_KEY_CCCD
+
+    const formData = new FormData()
+    formData.append(
+      'image',
+      bufferToStream(cccdFile.buffer),
+      cccdFile.originalname
+    )
+
+    const response = await axios.post(API_ENDPOINT, formData, {
+      headers: {
+        api_key: API_KEY,
+        ...formData.getHeaders()
+      }
+    })
+
+    const data = response.data
+    console.log('API Response:', data)
+
+    if (!data.data || data.data.length === 0) {
+      return {
+        success: false,
+        message: 'Không nhận diện được thông tin từ CCCD.'
+      }
+    }
+
+    const { dob: birthDate, name, sex } = data.data[0]
+
+    if (!birthDate) {
+      return {
+        success: false,
+        message: 'Không thể nhận diện ngày sinh trên CCCD.'
+      }
+    }
+
+    const age = calculateAge(birthDate)
+
+    if (age < 18) {
+      return {
+        success: false,
+        message: 'Người dùng chưa đủ 18 tuổi.'
+      }
+    }
+
+    return { success: true, birthDate, name, sex, age }
+  } catch (error) {
+    console.error(
+      'API Error:',
+      error.response ? error.response.data : error.message
+    )
+    return {
+      success: false,
+      message: 'Lỗi khi gọi API FPT.AI.',
+      error: error.message
+    }
+  }
+}
+
+// Service for user registration
 const registerService = async ({
   firstName,
   lastName,
@@ -17,14 +101,15 @@ const registerService = async ({
   userName,
   avtFile,
   backGroundFile,
+  cccdFile,
   hobbies
 }) => {
   try {
-    // Kiểm tra xem email hoặc username đã tồn tại chưa
-    const genderBoolean = gender === 'male' ? true : false
+    const genderBoolean = gender === 'male'
     const existingUser = await User.findOne({
       $or: [{ 'account.email': email }, { userName }]
     })
+
     if (existingUser) {
       return {
         success: false,
@@ -32,25 +117,25 @@ const registerService = async ({
       }
     }
 
-    // Mã hóa mật khẩu
+    const {
+      success,
+      message,
+      age,
+      birthDate: dob
+    } = await checkCCCDService(cccdFile)
+    if (!success) {
+      return { success: false, message }
+    }
+
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(password, salt)
 
-    // Tạo người dùng mới
     const newUser = new User({
-      account: {
-        email,
-        password: hashedPassword
-      },
+      account: { email, password: hashedPassword },
       firstName,
       lastName,
       userName,
-      details: {
-        phoneNumber,
-        address,
-        gender: genderBoolean,
-        birthDate
-      },
+      details: { phoneNumber, address, gender: genderBoolean, birthDate: dob },
       hobbies
     })
 
@@ -59,6 +144,7 @@ const registerService = async ({
 
     let avtUrl = ''
     let backGroundUrl = ''
+    let cccdUrl = ''
 
     if (avtFile) {
       avtUrl = await cloudStorageService.uploadImageUserToStorage(
@@ -67,7 +153,6 @@ const registerService = async ({
         'avatar'
       )
     }
-
     if (backGroundFile) {
       backGroundUrl = await cloudStorageService.uploadImageUserToStorage(
         backGroundFile,
@@ -75,9 +160,17 @@ const registerService = async ({
         'background'
       )
     }
+    if (cccdFile) {
+      cccdUrl = await cloudStorageService.uploadImageUserToStorage(
+        cccdFile,
+        userId,
+        'cccd'
+      )
+    }
 
     savedUser.avt = avtUrl
     savedUser.backGround = backGroundUrl
+    savedUser.cccdUrl = cccdUrl
     await savedUser.save()
 
     return {
@@ -85,18 +178,18 @@ const registerService = async ({
       data: {
         user: {
           id: savedUser._id,
-          firstName: savedUser.firstName,
-          lastName: savedUser.lastName,
-          email: savedUser.account.email,
-          userName: savedUser.userName,
-          avt: savedUser.avt,
-          backGround: savedUser.backGround,
-          hobbies: savedUser.hobbies
+          firstName,
+          lastName,
+          email,
+          userName,
+          avt: avtUrl,
+          backGround: backGroundUrl,
+          cccdUrl,
+          hobbies
         }
       }
     }
   } catch (error) {
-    console.error('Error in registerService:', error.message)
     return {
       success: false,
       message: 'Có lỗi xảy ra trong quá trình tạo tài khoản.',
@@ -121,7 +214,7 @@ const loginService = async (email, password) => {
     const token = jwt.sign(
       { id: user._id, email: user.account.email },
       env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '2h' }
     )
 
     return {
@@ -147,9 +240,7 @@ const loginService = async (email, password) => {
 
 const logoutService = async (req) => {
   try {
-    // Kiểm tra xem token đang được lưu ở đâu, ví dụ trong cookie
     if (req.cookies.token) {
-      // Xóa cookie chứa token nếu có
       req.res.clearCookie('token', {
         httpOnly: true,
         secure: true,
@@ -157,7 +248,6 @@ const logoutService = async (req) => {
       })
     }
 
-    // Nếu token được lưu trong localStorage phía client, bạn chỉ cần gửi phản hồi thành công
     return {
       success: true,
       message: 'Đăng xuất thành công!'
@@ -171,8 +261,118 @@ const logoutService = async (req) => {
   }
 }
 
+const loginAdminService = async (email, password) => {
+  try {
+    // Tìm admin bằng email
+    const admin = await Admin.findOne({ email })
+    if (!admin) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    // Kiểm tra mật khẩu
+    const isMatch = await bcrypt.compare(password, admin.password)
+    if (!isMatch) {
+      return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
+    }
+
+    // Tạo JWT token với vai trò admin
+    const token = jwt.sign(
+      {
+        id: admin._id,
+        email: admin.email,
+        role: 'admin' // Thêm vai trò admin vào token
+      },
+      env.JWT_SECRET,
+      { expiresIn: '2h' }
+    )
+
+    return {
+      success: true,
+      data: {
+        token,
+        admin: {
+          id: admin._id,
+          email: admin.email,
+          role: 'admin' // Trả về thông tin vai trò admin
+        }
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng nhập.',
+      error: error.message
+    }
+  }
+}
+
+const registerAdminService = async ({ email, password }) => {
+  try {
+    // Kiểm tra xem admin đã tồn tại với email này chưa
+    const existingAdmin = await Admin.findOne({ email })
+    if (existingAdmin) {
+      return { success: false, message: 'Email này đã được sử dụng.' }
+    }
+
+    // Băm mật khẩu
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    // Tạo admin mới
+    const newAdmin = new Admin({
+      email,
+      password: hashedPassword
+    })
+
+    // Lưu admin vào cơ sở dữ liệu
+    const savedAdmin = await newAdmin.save()
+
+    return {
+      success: true,
+      data: {
+        id: savedAdmin._id,
+        email: savedAdmin.email
+      },
+      message: 'Đăng ký thành công.'
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra trong quá trình đăng ký admin.',
+      error: error.message
+    }
+  }
+}
+const logoutAdminService = async (req) => {
+  try {
+    // Xóa cookie token nếu nó tồn tại
+    if (req.cookies.token) {
+      req.res.clearCookie('token', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Strict'
+      })
+    }
+
+    return {
+      success: true,
+      message: 'Đăng xuất admin thành công!'
+    }
+  } catch (error) {
+    console.error('Error in logoutAdminService:', error.message)
+    return {
+      success: false,
+      message: 'Có lỗi xảy ra khi xử lý logout admin.'
+    }
+  }
+}
+
 export const authService = {
   registerService,
   loginService,
-  logoutService
+  logoutService,
+  checkCCCDService,
+  loginAdminService,
+  registerAdminService,
+  logoutAdminService
 }
