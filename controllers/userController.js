@@ -1,4 +1,5 @@
 import { userService } from '../services/userService.js'
+import { cloudStorageService } from '../services/cloudStorageService.js'
 
 // Đăng ký người dùng mới
 const getUserById = async (req, res) => {
@@ -109,11 +110,60 @@ const getUserDataFollower = async (req, res) => {
   }
 }
 
+const updateUser = async (req, res) => {
+  const { userId } = req.params;
+  const data = req.body; 
+  const avtFile = req.files?.avatar ? req.files.avatar[0] : null
+  const backGroundFile = req.files?.background
+    ? req.files.background[0]
+    : null
+  try {
+    let avtUrl = ''
+    let backGroundUrl = ''
+
+    if (avtFile) {
+      avtUrl = await cloudStorageService.uploadImageUserToStorage(
+        avtFile,
+        userId,
+        'avatar'
+      )
+    }
+    if (backGroundFile) {
+      backGroundUrl = await cloudStorageService.uploadImageUserToStorage(
+        backGroundFile,
+        userId,
+        'background'
+      )
+    }
+
+    const result = await userService.updateUser(
+      userId, data, avtUrl, backGroundUrl
+    )
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+const getUserHobbies = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await userService.getUserHobbies(userId)
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Lỗi:', error)
+    return res.status(500).json({ msg: 'Lỗi server' })
+  }
+}
+
 export const userController = {
   getUserById,
   getArticlesByCollectionId,
   followUser, unFollowUser,
   RelationShip,
   getUserDataFriends,
-  getUserDataFollower
+  getUserDataFollower,
+  updateUser,
+  getUserHobbies,
 }

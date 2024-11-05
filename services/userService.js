@@ -2,7 +2,9 @@ import User from '../models/User.js'
 import Article from '../models/Article.js'
 import mongoose from 'mongoose'
 import AddFriends from '../models/AddFriends.js'
-
+import bcrypt from 'bcryptjs'
+import Hobby from '../models/Hobby.js'
+import MyPhoto from '../models/MyPhoto.js'
 // Hàm để lấy thông tin người dùng theo ID
 const getUserByIdService = async (userId) => {
 
@@ -154,6 +156,9 @@ const RelationShip = async (userId, friendId) => {
 }
 
 const getUserDataFriends = async (userId) => {
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+  }
   const user = await User.findById(userId).select('friends');
 
   const result = await Promise.all(user.friends.map(async (friend) => {
@@ -170,6 +175,9 @@ const getUserDataFriends = async (userId) => {
 }
 
 const getUserDataFollower = async (userId) => {
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+  }
   const user = await User.findById(userId).select('follow');
 
   const result = await Promise.all(user.follow.map(async (_idUser) => {
@@ -185,11 +193,115 @@ const getUserDataFollower = async (userId) => {
   return result;
 }
 
+const getUserHobbies = async (userId) => {
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+  }
+  const user = await User.findById(userId).select('hobbies');
+
+  const result = await Promise.all(user.hobbies.map(async (_id)=> {
+    if (!mongoose.Types.ObjectId.isValid(_id)) {
+      throw new Error('ID sở thích không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+    }
+    const hobby = await Hobby.findById(_id);
+    return hobby;
+  }));
+    
+  return result;
+}
+
+const updateUser = async (userId, newData, avtUrl, backGroundUrl) => {
+  try {
+    // Kiểm tra nếu `userId` không phải là ObjectId hợp lệ
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error("Invalid user ID");
+    }
+    const user = await User.findById(userId);
+
+    if (avtUrl !== ''){
+      try {
+        // Tạo một đối tượng MyPhoto mới
+        const myPhoto = new MyPhoto({
+          name: "Avatar", // Tên của ảnh hoặc video
+          idAuthor: userId, // ID của người dùng tác giả
+          type:'img', // 'img' hoặc 'video'
+          link: avtUrl, // Đường dẫn tới ảnh hoặc video
+          createdAt: new Date(), // Thời gian tạo
+          updatedAt: new Date() // Thời gian cập nhật
+        });
+    
+        const savedPhoto = await myPhoto.save();
+        newData = {
+          ...newData,
+          avt: [...user.avt, savedPhoto._id]
+        }
+        console.log('MyPhoto created successfully:', savedPhoto);
+
+      } catch (error) {
+        console.error('Error creating MyPhoto:', error);
+        throw error;
+      }
+    }
+
+    if (backGroundUrl !== ''){
+      try {
+        // Tạo một đối tượng MyPhoto mới
+        const myPhoto = new MyPhoto({
+          name: "Background", // Tên của ảnh hoặc video
+          idAuthor: userId, // ID của người dùng tác giả
+          type:'img', // 'img' hoặc 'video'
+          link: backGroundUrl, // Đường dẫn tới ảnh hoặc video
+          createdAt: new Date(), // Thời gian tạo
+          updatedAt: new Date() // Thời gian cập nhật
+        });
+    
+        const savedPhoto = await myPhoto.save();
+        newData = {
+          ...newData,
+          backGround: [...user.backGround, savedPhoto._id]
+        }
+        console.log('MyPhoto created successfully:', savedPhoto);
+
+      } catch (error) {
+        console.error('Error creating MyPhoto:', error);
+        throw error;
+      }
+    }
+
+    // Nếu có thay đổi trong `account.password`, băm mật khẩu mới
+    if (newData.account && newData.account.password) {
+      const salt = await bcrypt.genSalt(10);
+      newData.account.password = await bcrypt.hash(newData.account.password, salt);
+    }
+
+    // Thêm ngày cập nhật
+    newData.updatedAt = new Date();
+
+    // Tìm và cập nhật người dùng
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: newData },
+      { new: true, runValidators: true } // Trả về user đã cập nhật và kiểm tra hợp lệ
+    );
+
+    if (!updatedUser) {
+      throw new Error("User not found");
+    }
+
+    return updatedUser;
+  } catch (error) {
+    console.error("Error updating user:", error);
+    throw error;
+  }
+};
+
 export const userService = {
   getUserByIdService,
   getArticlesByCollectionIdService,
   followUser, unFollowUser,
   RelationShip,
   getUserDataFriends,
-  getUserDataFollower
+  getUserDataFollower,
+  updateUser,
+  getUserHobbies,
 }
