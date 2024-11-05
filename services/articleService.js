@@ -1,5 +1,6 @@
 import Article from '../models/Article.js'
 import Comment from '../models/Comment.js'
+import MyPhoto from '../models/MyPhoto.js'
 import Notification from '../models/Notification.js'
 import User from '../models/User.js'
 import Group from '../models/Group.js'
@@ -9,40 +10,66 @@ import mongoose from 'mongoose'
 const getArticleByIdService = async (articleId) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(articleId)) {
-      throw new Error('ID bài viết không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+      throw new Error('ID bài viết không hợp lệ. ID phải có 24 ký tự hợp lệ.');
     }
 
     const article = await Article.findById(articleId)
-      .populate('createdBy', 'firstName lastName displayName avt')
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: {
+          path: 'avt',
+          model: 'MyPhoto',
+          select: 'name link idAuthor type' // Lấy thông tin MyPhoto của người tạo bài viết
+        }
+      })
+      .populate({
+        path: 'listPhoto',
+        model: 'MyPhoto',
+        select: 'name link idAuthor type' // Lấy thông tin MyPhoto từ listPhoto
+      })
       .populate({
         path: 'interact.comment',
         model: 'Comment',
         populate: [
-          { path: '_iduser', select: 'firstName lastName displayName avt' },
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: {
+              path: 'avt',
+              model: 'MyPhoto',
+              select: 'name link idAuthor type' // Lấy MyPhoto từ avt của người dùng trong comment
+            }
+          },
           {
             path: 'replyComment',
             model: 'Comment',
             populate: {
               path: '_iduser',
-              select: 'firstName lastName displayName avt'
+              select: 'firstName lastName displayName avt',
+              populate: {
+                path: 'avt',
+                model: 'MyPhoto',
+                select: 'name link idAuthor type' // Lấy MyPhoto từ avt của người dùng trong replyComment
+              }
             }
           }
         ]
       })
-      .exec()
+      .lean(); // Sử dụng lean() để chuyển đối tượng thành JavaScript thuần túy
 
-    if (!article) throw new Error('Bài viết không tồn tại.')
+    if (!article) throw new Error('Bài viết không tồn tại.');
 
     return {
-      ...article.toObject(),
+      ...article,
       totalLikes: article.totalLikes,
       totalComments: article.totalComments
-    }
+    };
   } catch (error) {
-    console.error('Lỗi khi lấy bài viết:', error.message)
-    throw new Error('Lỗi khi lấy bài viết.')
+    console.error('Lỗi khi lấy bài viết:', error.message);
+    throw new Error('Lỗi khi lấy bài viết.');
   }
-}
+};
 
 // Service tạo bài viết mới
 const createArticleService = async ({
@@ -53,36 +80,63 @@ const createArticleService = async ({
   userId
 }) => {
   try {
-    const user = await User.findById(userId).select('_id firstName lastName avt displayName'); // Chỉ lấy các trường cần thiết từ user
+    // Truy xuất thông tin người tạo bài viết, bao gồm avatar và background chi tiết
+    const user = await User.findById(userId)
+      .select('_id firstName lastName avt backGround displayName')
+      .populate([
+        {
+          path: 'avt',
+          model: 'MyPhoto',
+          select: 'name link idAuthor type'
+        },
+        {
+          path: 'backGround',
+          model: 'MyPhoto',
+          select: 'name link idAuthor type'
+        }
+      ]);
 
     if (!user) {
       throw new Error('Người dùng không tồn tại');
     }
 
+    // Lấy thông tin chi tiết của các ảnh đính kèm trong bài viết
+    const photoDetails = await Promise.all(
+      listPhoto.map(async (photoId) => {
+        const photo = await MyPhoto.findById(photoId).select('name link idAuthor type');
+        return photo;
+      })
+    );
+
+    // Tạo bài viết mới
     const newArticle = new Article({
       content,
-      listPhoto,
+      listPhoto: photoDetails.map(photo => photo._id),
       scope,
       hashTag,
-      interact: { emoticons: [], comment: [] }, // Đảm bảo khởi tạo mảng rỗng
+      interact: { emoticons: [], comment: [] },
       createdBy: userId,
       createdAt: new Date()
     });
 
+    // Lưu bài viết vào cơ sở dữ liệu
     const savedArticle = await newArticle.save();
 
+    // Trả về thông tin bài viết đã lưu cùng chi tiết của avatar và background
     return {
       ...savedArticle.toObject(),
       createdBy: {
         _id: user._id,
         firstName: user.firstName,
         lastName: user.lastName,
-        avt: user.avt,
+        avt: user.avt || [], // Trả về danh sách avatar nếu có
+        backGround: user.backGround || [], // Trả về danh sách background nếu có
         displayName: user.displayName || `${user.firstName} ${user.lastName}`
       },
+      listPhoto: photoDetails,
       interact: {
-        emoticons: savedArticle.interact.emoticons || [], // Đảm bảo mảng rỗng nếu không có dữ liệu
-        comment: savedArticle.interact.comment || [] // Đảm bảo mảng rỗng nếu không có dữ liệu
+        emoticons: savedArticle.interact.emoticons || [],
+        comment: savedArticle.interact.comment || []
       }
     };
   } catch (error) {
@@ -90,9 +144,6 @@ const createArticleService = async ({
     throw new Error(`Lỗi khi tạo bài viết: ${error.message}`);
   }
 };
-
-
-
 
 const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) => {
   try {
@@ -102,6 +153,7 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
+    // Lấy thông tin người dùng và danh sách bạn bè
     const user = await User.findById(userObjectId).populate({
       path: 'friends',
       populate: { path: 'idUser', select: '_id' }
@@ -110,25 +162,17 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     if (!user) throw new Error('Người dùng không tồn tại');
 
     const friendIds = user.friends
-      ? user.friends.map((friend) => {
-          if (friend && friend.idUser && friend.idUser._id) {
-            const friendId = friend.idUser._id.toString();
-            if (mongoose.Types.ObjectId.isValid(friendId)) {
-              return new mongoose.Types.ObjectId(friendId);
-            }
-          }
-          return null;
-        })
+      ? user.friends
+          .map(friend => friend?.idUser?._id && new mongoose.Types.ObjectId(friend.idUser._id))
+          .filter(Boolean)
       : [];
 
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
       'members.listUsers.state': 'processed'
     });
+    const groupIds = groups.map(group => group._id);
 
-    const groupIds = groups.map((group) => group._id);
-
-    // Tính toán skip cho việc phân trang
     const skip = (page - 1) * limit;
 
     const articles = await Article.find({
@@ -136,41 +180,55 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
         { _destroy: { $exists: false } },
         {
           $or: [
-            // Điều kiện 1: Bài viết của bạn bè với chế độ hiển thị là `public` hoặc `friends`
-            {
-              createdBy: { $in: friendIds },
-              scope: { $in: ['public', 'friends'] }
-            },
-            // Điều kiện 2: Bài viết thuộc nhóm mà người dùng đã tham gia và đã được duyệt
-            {
-              groupID: { $in: groupIds },
-              state: 'processed'
-            },
-            // Điều kiện 3: Bài viết của chính bản thân người dùng
-            {
-              createdBy: userObjectId
-            }
+            { createdBy: { $in: friendIds }, scope: { $in: ['public', 'friends'] } },
+            { groupID: { $in: groupIds }, state: 'processed' },
+            { createdBy: userObjectId }
           ]
         }
       ]
     })
-      .skip(skip) // Bỏ qua số bài viết theo phân trang
-      .limit(limit) // Lấy số lượng bài viết tối đa theo phân trang
+      .skip(skip)
+      .limit(limit)
       .populate({
         path: 'createdBy',
-        select: 'firstName lastName displayName avt'
+        select: 'firstName lastName displayName avt backGround',
+        populate: [
+          {
+            path: 'avt',
+            model: 'MyPhoto',
+            select: 'name link idAuthor type'
+          },
+          {
+            path: 'backGround',
+            model: 'MyPhoto',
+            select: 'name link idAuthor type'
+          }
+        ]
       })
       .populate({
         path: 'interact.comment',
         model: 'Comment',
         populate: [
-          { path: '_iduser', select: 'firstName lastName displayName avt' },
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: {
+              path: 'avt',
+              model: 'MyPhoto',
+              select: 'name link idAuthor type'
+            }
+          },
           {
             path: 'replyComment',
             model: 'Comment',
             populate: {
               path: '_iduser',
-              select: 'firstName lastName displayName avt'
+              select: 'firstName lastName displayName avt',
+              populate: {
+                path: 'avt',
+                model: 'MyPhoto',
+                select: 'name link idAuthor type'
+              }
             }
           }
         ]
@@ -179,13 +237,17 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
         path: 'groupID',
         select: 'groupName avt backGround'
       })
+      .populate({
+        path: 'listPhoto',
+        model: 'MyPhoto',
+        select: 'name link idAuthor type'
+      })
       .sort({ createdAt: -1 });
 
     if (!articles || articles.length === 0) {
       return { articles: [], hasMore: false };
     }
 
-    // Kiểm tra nếu còn bài viết để tải (nếu số bài viết trả về ít hơn `limit` thì không còn bài viết nào nữa)
     const hasMore = articles.length === limit;
 
     return { articles, hasMore };
@@ -195,37 +257,47 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
   }
 };
 
-
 // Service xóa bài viết
 const deleteArticleService = async (articleId) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(articleId)) {
-      throw new Error('ID bài viết không hợp lệ.')
+      throw new Error('ID bài viết không hợp lệ.');
     }
 
-    const article = await Article.findById(articleId)
+    const article = await Article.findById(articleId);
     if (!article) {
-      throw new Error('Bài viết không tồn tại.')
+      throw new Error('Bài viết không tồn tại.');
     }
 
-    await Comment.deleteMany({ _id: { $in: article.interact.comment } })
+    // Xóa các bình luận liên quan đến bài viết
+    await Comment.deleteMany({ _id: { $in: article.interact.comment } });
 
-    article._destroy = new Date()
-    await article.save()
+    // Đánh dấu xóa các ảnh liên quan bằng cách cập nhật thời gian _destroy cho từng ảnh
+    if (article.listPhoto && article.listPhoto.length > 0) {
+      await MyPhoto.updateMany(
+        { _id: { $in: article.listPhoto } },
+        { $set: { _destroy: new Date() } }
+      );
+    }
 
+    // Đánh dấu thời gian xóa cho bài viết
+    article._destroy = new Date();
+    await article.save();
+
+    // Xóa bài viết khỏi danh sách bài viết của người dùng
     await User.findByIdAndUpdate(
       article.createdBy,
       { $pull: { listArticle: articleId } },
       { new: true }
-    )
+    );
 
     return {
-      message: 'Đánh dấu xóa bài viết và các bình luận liên quan thành công.'
-    }
+      message: 'Đánh dấu xóa bài viết và các bình luận, ảnh liên quan thành công.'
+    };
   } catch (error) {
-    throw new Error(`Lỗi khi xóa bài viết: ${error.message}`)
+    throw new Error(`Lỗi khi xóa bài viết: ${error.message}`);
   }
-}
+};
 
 // Service thêm bình luận vào bài viết + socket thông báo rồi(chưa format lại thông báo) + chưa socket số comment
 const addCommentToArticleService = async ({
@@ -247,8 +319,9 @@ const addCommentToArticleService = async ({
 
     const article = await Article.findById(postId).populate(
       'createdBy',
-      'displayName avt'
+      'displayName avt backGround'
     );
+
     if (!article) throw new Error('Bài viết không tồn tại');
 
     article.interact.comment.push(savedComment._id);
@@ -256,25 +329,31 @@ const addCommentToArticleService = async ({
     article.updatedAt = new Date();
     await article.save();
 
-    const populatedComment = await Comment.findById(savedComment._id).populate(
-      '_iduser',
-      'displayName avt'
-    );
+    const populatedComment = await Comment.findById(savedComment._id)
+      .populate([
+        {
+          path: '_iduser',
+          select: 'displayName avt backGround',
+          populate: [
+            { path: 'avt', model: 'MyPhoto', select: 'name link idAuthor type' },
+            { path: 'backGround', model: 'MyPhoto', select: 'name link idAuthor type' }
+          ]
+        }
+      ]);
 
-    // Phát sự kiện WebSocket thông báo bình luận mới (cho tất cả các client)
     emitEvent('new_comment', {
       postId,
       comment: populatedComment,
-      totalComments: article.totalComments // Cập nhật số lượng bình luận
+      totalComments: article.totalComments
     });
 
-    // Chỉ gửi thông báo nếu người bình luận khác với người tạo bài viết
     if (_iduser.toString() !== article.createdBy._id.toString()) {
       emitEvent('new_comment_notification', {
         senderId: {
           _id: _iduser,
           displayName: populatedComment._iduser.displayName,
-          avt: populatedComment._iduser.avt ? [populatedComment._iduser.avt] : ['']
+          avt: populatedComment._iduser.avt || [],
+          backGround: populatedComment._iduser.backGround || []
         },
         postId,
         receiverId: article.createdBy._id,
@@ -283,7 +362,6 @@ const addCommentToArticleService = async ({
         createdAt: new Date()
       });
 
-      // Lưu thông báo vào database
       const notification = new Notification({
         senderId: _iduser,
         receiverId: article.createdBy._id,
@@ -300,7 +378,6 @@ const addCommentToArticleService = async ({
   }
 };
 
-
 // Service thêm phản hồi vào bình luận + socket thông báo rồi(chưa format lại thông báo) + chưa socket số comment
 const addReplyToCommentService = async ({
   postId,
@@ -313,12 +390,18 @@ const addReplyToCommentService = async ({
       path: 'interact.comment',
       model: 'Comment'
     });
+
     if (!article) throw new Error('Bài viết không tồn tại');
 
-    const comment = await Comment.findById(commentId).populate(
-      '_iduser',
-      'displayName avt'
-    );
+    const comment = await Comment.findById(commentId).populate({
+      path: '_iduser',
+      select: 'displayName avt backGround',
+      populate: [
+        { path: 'avt', model: 'MyPhoto', select: 'name link idAuthor type' },
+        { path: 'backGround', model: 'MyPhoto', select: 'name link idAuthor type' }
+      ]
+    });
+
     if (!comment) throw new Error('Bình luận không tồn tại');
 
     const newReply = new Comment({
@@ -339,12 +422,15 @@ const addReplyToCommentService = async ({
     article.totalComments = (article.totalComments || 0) + 1;
     await article.save();
 
-    const populatedReply = await Comment.findById(savedReply._id).populate(
-      '_iduser',
-      'displayName avt'
-    );
+    const populatedReply = await Comment.findById(savedReply._id).populate({
+      path: '_iduser',
+      select: 'displayName avt backGround',
+      populate: [
+        { path: 'avt', model: 'MyPhoto', select: 'name link idAuthor type' },
+        { path: 'backGround', model: 'MyPhoto', select: 'name link idAuthor type' }
+      ]
+    });
 
-    // Phát sự kiện WebSocket thông báo phản hồi mới (cho tất cả các client)
     emitEvent('new_reply', {
       postId,
       commentId,
@@ -352,13 +438,13 @@ const addReplyToCommentService = async ({
       totalComments: article.totalComments
     });
 
-    // Chỉ gửi thông báo nếu người trả lời khác với người tạo bình luận
     if (_iduser.toString() !== comment._iduser._id.toString()) {
       emitEvent('new_reply_notification', {
         senderId: {
           _id: _iduser,
           displayName: populatedReply._iduser.displayName,
-          avt: populatedReply._iduser.avt ? [populatedReply._iduser.avt] : ['']
+          avt: populatedReply._iduser.avt || [],
+          backGround: populatedReply._iduser.backGround || []
         },
         commentId,
         postId,
@@ -383,7 +469,6 @@ const addReplyToCommentService = async ({
     throw new Error(`Lỗi khi thêm trả lời bình luận: ${error.message}`);
   }
 };
-
 
 // socket thông báo rồi(chưa format lại thông báo) + chưa socket số like
 const likeArticleService = async (postId, userId) => {
@@ -469,7 +554,6 @@ const reportArticleService = async (postId, userId, reason) => {
     throw new Error(`Không thể báo cáo bài viết: ${error.message}`);
   }
 };
-
 
 const saveArticleService = async (postId, userId) => {
   try {
@@ -683,20 +767,29 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
   }
 };
 
-
 // Service - shareArticleService
 const shareArticleService = async ({ postId, content, scope, userId }) => {
   try {
-    const user = await User.findById(userId).select('_id firstName lastName avt displayName');
+    // Tìm người dùng và lấy thông tin cùng ảnh đại diện từ MyPhoto
+    const user = await User.findById(userId)
+      .select('_id firstName lastName avt displayName')
+      .populate({
+        path: 'avt',
+        model: 'MyPhoto',
+        select: '_id name idAuthor type link', // Chọn tất cả các trường cần thiết của MyPhoto
+      });
+
     if (!user) {
       throw new Error('Người dùng không tồn tại');
     }
 
+    // Kiểm tra bài viết gốc để chia sẻ
     const article = await Article.findById(postId).populate('createdBy');
     if (!article) {
       throw new Error('Bài viết không tồn tại');
     }
 
+    // Tạo bài viết mới với các thông tin yêu cầu
     const newArticle = new Article({
       content,
       scope,
@@ -712,14 +805,14 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
 
     const savedArticle = await newArticle.save();
 
-    // Trả về bài viết với định dạng mong muốn
+    // Trả về bài viết với định dạng mong muốn, bao gồm toàn bộ thông tin của `avt` dưới dạng mảng
     return {
       ...savedArticle.toObject(),
       createdBy: {
         _id: user._id,
         firstName: user.firstName,
         lastName: user.lastName,
-        avt: user.avt ? user.avt[user.avt.length - 1] : '',
+        avt: Array.isArray(user.avt) ? user.avt : [user.avt], // Trả về toàn bộ mảng avt nếu là mảng, nếu không thì tạo mảng mới chứa avt
         displayName: user.displayName || `${user.firstName} ${user.lastName}`
       }
     };
@@ -728,26 +821,45 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
   }
 };
 
-
-
 const getAllArticlesByUserService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('ID người dùng không hợp lệ.')
   }
 
   const articles = await Article.find({ createdBy: userId })
-    .populate('createdBy', 'firstName lastName displayName avt')
+    .populate({
+      path: 'createdBy',
+      select: 'firstName lastName displayName avt',
+      populate: {
+        path: 'avt',
+        model: 'MyPhoto',
+        select: 'name link idAuthor type'
+      }
+    })
     .populate({
       path: 'interact.comment',
       model: 'Comment',
       populate: [
-        { path: '_iduser', select: 'firstName lastName displayName avt' },
+        {
+          path: '_iduser',
+          select: 'firstName lastName displayName avt',
+          populate: {
+            path: 'avt',
+            model: 'MyPhoto',
+            select: 'name link idAuthor type'
+          }
+        },
         {
           path: 'replyComment',
           model: 'Comment',
           populate: {
             path: '_iduser',
-            select: 'firstName lastName displayName avt'
+            select: 'firstName lastName displayName avt',
+            populate: {
+              path: 'avt',
+              model: 'MyPhoto',
+              select: 'name link idAuthor type'
+            }
           }
         }
       ]
