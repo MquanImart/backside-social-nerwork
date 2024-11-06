@@ -26,4 +26,13 @@ Router.post('/login-admin', authController.loginAdmin)
 Router.post('/register-admin', authController.registerAdmin)
 Router.post('/logout-admin', verifyAdmin, authController.logoutAdmin)
 
+// Route để gửi mã OTP
+Router.post('/password-reset/initiate', authController.forgotPassword);
+
+// Route để xác minh mã OTP
+Router.post('/password-reset/verify', authController.verifyOtp);
+
+// Route để đặt lại mật khẩu
+Router.post('/password-reset/reset', authController.resetPassword);
+
 export const authRoute = Router

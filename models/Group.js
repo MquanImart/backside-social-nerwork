@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
 
 const groupSchema = new mongoose.Schema({
   warningLevel: { type: Number, enum: [0, 1, 2, 3], default: 0 },
@@ -7,11 +7,11 @@ const groupSchema = new mongoose.Schema({
   idAdmin: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
   },
   introduction: String,
-  avt: String,
-  backGround: String,
+  avt: { type: mongoose.Schema.Types.ObjectId, ref: 'MyPhoto' }, // Thay đổi để tham chiếu đến MyPhoto
+  backGround: { type: mongoose.Schema.Types.ObjectId, ref: 'MyPhoto' }, // Thay đổi để tham chiếu đến MyPhoto
   members: {
     count: { type: Number, default: 0 },
     listUsers: [
@@ -20,11 +20,11 @@ const groupSchema = new mongoose.Schema({
         state: {
           type: String,
           enum: ['pending', 'accepted', 'rejected'],
-          default: 'pending'
+          default: 'pending',
         },
-        joinDate: { type: Date, default: Date.now }
-      }
-    ]
+        joinDate: { type: Date, default: Date.now },
+      },
+    ],
   },
   article: {
     count: { type: Number, default: 0 },
@@ -34,10 +34,10 @@ const groupSchema = new mongoose.Schema({
         state: {
           type: String,
           enum: ['pending', 'processed', 'rejected'],
-          default: 'pending'
-        }
-      }
-    ]
+          default: 'pending',
+        },
+      },
+    ],
   },
   rule: [String],
   Administrators: [
@@ -46,17 +46,17 @@ const groupSchema = new mongoose.Schema({
       state: {
         type: String,
         enum: ['pending', 'accepted', 'rejected'],
-        default: 'pending'
+        default: 'pending',
       },
-      joinDate: { type: Date, default: Date.now }
-    }
+      joinDate: { type: Date, default: Date.now },
+    },
   ],
   hobbies: [String],
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
-  _destroy: Date
-})
+  _destroy: Date,
+});
 
-const Group = mongoose.model('Group', groupSchema)
+const Group = mongoose.model('Group', groupSchema);
 
-export default Group
+export default Group;

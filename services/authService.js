@@ -6,7 +6,9 @@ import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
 import axios from 'axios'
 import FormData from 'form-data'
+import MyPhoto from '../models/MyPhoto.js'
 import { Readable } from 'stream'
+import mongoose from 'mongoose'
 
 // Convert buffer to readable stream
 const bufferToStream = (buffer) => {
@@ -100,77 +102,54 @@ const registerService = async ({
   userName,
   avtFile,
   backGroundFile,
-  cccdFile,
   hobbies
 }) => {
   try {
-    const genderBoolean = gender === 'male'
+    const genderBoolean = gender === 'male';
     const existingUser = await User.findOne({
       $or: [{ 'account.email': email }, { userName }]
-    })
+    });
 
     if (existingUser) {
       return {
         success: false,
         message: 'Email hoặc Tên người dùng đã tồn tại.'
-      }
+      };
     }
 
-    const {
-      success,
-      message,
-      age,
-      birthDate: dob
-    } = await checkCCCDService(cccdFile)
-    if (!success) {
-      return { success: false, message }
-    }
-
-    const salt = await bcrypt.genSalt(10)
-    const hashedPassword = await bcrypt.hash(password, salt)
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const newUser = new User({
       account: { email, password: hashedPassword },
       firstName,
       lastName,
       userName,
-      details: { phoneNumber, address, gender: genderBoolean, birthDate: dob },
+      details: { phoneNumber, address, gender: genderBoolean, birthDate },
       hobbies
-    })
+    });
 
-    const savedUser = await newUser.save()
-    const userId = savedUser._id.toString()
+    const savedUser = await newUser.save(); // Lưu user mà không dùng transaction
+    const userId = savedUser._id.toString();
 
-    let avtUrl = ''
-    let backGroundUrl = ''
-    let cccdUrl = ''
+    // Upload avatar và background, sau đó lưu ObjectId của MyPhoto
+    let avtPhoto, backGroundPhoto;
 
     if (avtFile) {
-      avtUrl = await cloudStorageService.uploadImageUserToStorage(
-        avtFile,
-        userId,
-        'avatar'
-      )
-    }
-    if (backGroundFile) {
-      backGroundUrl = await cloudStorageService.uploadImageUserToStorage(
-        backGroundFile,
-        userId,
-        'background'
-      )
-    }
-    if (cccdFile) {
-      cccdUrl = await cloudStorageService.uploadImageUserToStorage(
-        cccdFile,
-        userId,
-        'cccd'
-      )
+      const avtLink = await cloudStorageService.uploadImageUserToStorage(avtFile, userId, 'avatar');
+      avtPhoto = new MyPhoto({ name: avtFile.originalname, idAuthor: userId, type: 'img', link: avtLink });
+      await avtPhoto.save(); // Lưu avt mà không dùng transaction
+      savedUser.avt = [avtPhoto._id];
     }
 
-    savedUser.avt = avtUrl
-    savedUser.backGround = backGroundUrl
-    savedUser.cccdUrl = cccdUrl
-    await savedUser.save()
+    if (backGroundFile) {
+      const backGroundLink = await cloudStorageService.uploadImageUserToStorage(backGroundFile, userId, 'background');
+      backGroundPhoto = new MyPhoto({ name: backGroundFile.originalname, idAuthor: userId, type: 'img', link: backGroundLink });
+      await backGroundPhoto.save(); // Lưu background mà không dùng transaction
+      savedUser.backGround = [backGroundPhoto._id];
+    }
+
+    await savedUser.save(); // Cập nhật avatar và background mà không dùng transaction
 
     return {
       success: true,
@@ -181,21 +160,27 @@ const registerService = async ({
           lastName,
           email,
           userName,
-          avt: avtUrl,
-          backGround: backGroundUrl,
-          cccdUrl,
+          avt: avtPhoto ? avtPhoto.link : null,
+          backGround: backGroundPhoto ? backGroundPhoto.link : null,
           hobbies
         }
       }
-    }
+    };
   } catch (error) {
+    console.error("Lỗi trong service đăng ký:", error);
     return {
       success: false,
       message: 'Có lỗi xảy ra trong quá trình tạo tài khoản.',
       error: error.message
-    }
+    };
   }
-}
+};
+
+
+
+
+
+
 
 // Service xử lý logic đăng nhập
 const loginService = async (email, password) => {
