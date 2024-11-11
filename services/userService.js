@@ -7,26 +7,35 @@ import Hobby from '../models/Hobby.js'
 import MyPhoto from '../models/MyPhoto.js'
 // Hàm để lấy thông tin người dùng theo ID
 const getUserByIdService = async (userId) => {
+  // Tìm người dùng theo ID và populate các trường avt và backGround để lấy chi tiết từ MyPhoto
+  const user = await User.findById(userId)
+    .select('-_destroy -__v') // Không trả về các trường không cần thiết
+    .populate('avt', 'name link') // Lấy chi tiết ảnh avatar từ MyPhoto
+    .populate('backGround', 'name link'); // Lấy chi tiết ảnh background từ MyPhoto
 
-  const user = await User.findById(userId).select('-_destroy -__v') // Chọn không trả về các trường không cần thiết
   if (!user) {
-    throw new Error('Người dùng không tồn tại')
+    throw new Error('Người dùng không tồn tại');
   }
+
+  // Tìm tất cả người dùng để xác định những người theo dõi người dùng này
   const allUsers = await User.find();
   const followUser = allUsers.filter((_user) => _user.follow.includes(userId));
 
-  const dataFollower = followUser.map((follower)=> {
+  // Lấy dữ liệu người theo dõi với các thông tin cần thiết
+  const dataFollower = followUser.map((follower) => {
     return {
       _id: follower._id,
       avt: follower.avt,
       name: follower.displayName
-    }
-  })
+    };
+  });
+
   return {
     ...user._doc,
     follower: dataFollower
-  }
-}
+  };
+};
+
 
 const getFriendUser = async (userId) => {
 
@@ -54,32 +63,76 @@ const getFriendUser = async (userId) => {
 // Hàm lấy bài viết trong bộ sưu tập của người dùng
 const getArticlesByCollectionIdService = async (userId, collectionId) => {
   // Tìm người dùng theo userId
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
 
   if (!user) {
-    throw new Error('Người dùng không tồn tại')
+    throw new Error('Người dùng không tồn tại');
   }
 
   // Tìm bộ sưu tập theo collectionId
   const collection = user.collections.find(
     (col) => col._id.toString() === collectionId
-  )
+  );
 
   if (!collection) {
-    throw new Error('Bộ sưu tập không tồn tại')
+    throw new Error('Bộ sưu tập không tồn tại');
   }
 
-
-  // Convert string IDs to ObjectId using 'new'
+  // Convert string IDs to ObjectId
   const articleIds = collection.items.map(
     (id) => new mongoose.Types.ObjectId(id)
-  )
+  );
 
-  // Lấy danh sách bài viết theo items trong bộ sưu tập
+  // Lấy danh sách bài viết theo items trong bộ sưu tập, cùng với ảnh trong listPhoto, createdBy, comment, và replyComment
   const articles = await Article.find({ _id: { $in: articleIds } })
+    .populate({
+      path: 'listPhoto',
+      select: 'name link type', // Lấy các trường cần thiết từ listPhoto
+    })
+    .populate({
+      path: 'createdBy',
+      select: 'firstName lastName displayName avt', // Lấy thông tin người tạo bài viết và ảnh đại diện
+      populate: {
+        path: 'avt',
+        select: 'name link type', // Lấy MyPhoto từ avt của người tạo bài viết
+      },
+    })
+    .populate({
+      path: 'interact.comment',
+      populate: [
+        {
+          path: '_iduser',
+          select: 'firstName lastName displayName avt', // Lấy thông tin người dùng trong comment
+          populate: {
+            path: 'avt',
+            select: 'name link type', // Lấy MyPhoto từ avt của người dùng trong comment
+          },
+        },
+        {
+          path: 'replyComment._iduser',
+          select: 'firstName lastName displayName avt', // Lấy thông tin người dùng trong replyComment
+          populate: {
+            path: 'avt',
+            select: 'name link type', // Lấy MyPhoto từ avt của người dùng trong replyComment
+          },
+        },
+        {
+          path: 'replyComment',
+          populate: {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt', // Lấy thông tin người dùng trong replyComment
+            populate: {
+              path: 'avt',
+              select: 'name link type', // Lấy MyPhoto từ avt của người dùng trong replyComment
+            },
+          },
+        },
+      ],
+    })
+    .lean(); // Chuyển đổi kết quả thành đối tượng JavaScript thuần túy
 
-  return articles
-}
+  return articles;
+};
 
 const followUser = async (userId, followerId) => {
 

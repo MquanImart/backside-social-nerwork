@@ -111,8 +111,11 @@ const fetchGroupDistributionService = async () => {
 
 const getAllUsersService = async () => {
   try {
-    // Lấy tất cả người dùng từ cơ sở dữ liệu
+
+    
     const users = await User.find()
+      .populate('avt', 'name link type') 
+      .populate('backGround', 'name link type')
 
     // Trả về danh sách người dùng
     return users

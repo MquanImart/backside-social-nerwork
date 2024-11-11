@@ -36,7 +36,7 @@ const articleSchema = new mongoose.Schema({
   },
   content: { type: String, required: true },
   hashTag: [String],
-  listPhoto: [String],
+  listPhoto: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MyPhoto' }],
   scope: {
     type: String,
     default: 'public',

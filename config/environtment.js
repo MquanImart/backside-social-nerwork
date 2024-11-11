@@ -23,5 +23,9 @@ export const env = {
   JWT_REFRESH_KEY: process.env.JWT_REFRESH_KEY,
 
   API_ENDPOINT_CCCD: process.env.API_ENDPOINT_CCCD,
-  API_KEY_CCCD: process.env.API_KEY_CCCD
+  API_KEY_CCCD: process.env.API_KEY_CCCD,
+
+  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_PASSWORD: process.env.EMAIL_PASSWORD,
+  CLIENT_URL: process.env.CLIENT_URL
 }

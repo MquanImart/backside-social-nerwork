@@ -3,6 +3,7 @@ import Article from '../models/Article.js'
 import User from '../models/User.js'
 import { cloudStorageService } from '../services/cloudStorageService.js'
 import { emitEvent } from '../sockets/socket.js'
+import MyPhoto from '../models/MyPhoto.js'
 import Notification from '../models/Notification.js' // Import Notification model
 
 const getArticleById = async (req, res) => {
@@ -22,32 +23,63 @@ const getArticleById = async (req, res) => {
 }
 
 // Tạo bài viết
-
 const createArticle = async (req, res) => {
   try {
-    const { content, scope, hashTag, userId } = req.body
+    const { content, scope, hashTag, userId } = req.body;
 
-    // Upload từng file trong `req.files` và lưu các URL
-    const listPhoto = await Promise.all(
-      req.files.map((file) => cloudStorageService.uploadImageToStorage(file))
-    )
+    // Nếu có file thì upload, nếu không thì listPhoto sẽ là một mảng rỗng
+    let listPhoto = [];
+    if (req.files && req.files.length > 0) {
+      // Upload từng file trong `req.files` và tạo tài liệu MyPhoto cho mỗi ảnh hoặc video
+      listPhoto = await Promise.all(
+        req.files.map(async (file) => {
+          // Xác định loại tệp dựa vào đuôi file
+          const imageExtensions = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
+          const fileExtension = file.originalname.split(".").pop().toLowerCase();
+          const fileType = imageExtensions.includes(fileExtension) ? "img" : "video";
 
+          // Tạo tài liệu MyPhoto mới trước với link tạm thời
+          const newPhoto = new MyPhoto({
+            name: file.originalname,
+            idAuthor: userId,
+            type: fileType, // Loại sẽ là "img" hoặc "video" dựa trên phần mở rộng
+            link: "placeholder_link" // Đặt giá trị tạm thời cho link
+          });
+
+          const savedPhoto = await newPhoto.save();
+
+          // Sử dụng _id của MyPhoto làm tên file
+          const fileName = `user/${userId}/article/${savedPhoto._id}`;
+          const link = await cloudStorageService.uploadImageStorage(file, fileName);
+
+          // Cập nhật link trong tài liệu MyPhoto sau khi upload
+          await MyPhoto.findByIdAndUpdate(savedPhoto._id, { link: link });
+
+          return savedPhoto._id; // Lấy ObjectId của ảnh hoặc video đã lưu
+        })
+      );
+    }
+
+    // Gọi hàm createArticleService để tạo bài viết mới với listPhoto là các ObjectId của MyPhoto hoặc mảng rỗng
     const savedArticle = await articleService.createArticleService({
       content,
-      listPhoto,
+      listPhoto, // Sẽ là mảng chứa ObjectId ảnh hoặc video hoặc mảng rỗng nếu không có file
       scope,
       hashTag,
       userId
-    })
+    });
 
-    res
-      .status(201)
-      .json({ message: 'Post created successfully', post: savedArticle })
+    res.status(201).json({
+      message: 'Post created successfully',
+      post: savedArticle
+    });
   } catch (error) {
-    console.error('Error creating article:', error)
-    res.status(500).json({ message: 'Server error', error: error.message })
+    console.error('Error creating article:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
-}
+};
+
+
 
 const getAllArticlesWithComments = async (req, res) => {
   try {

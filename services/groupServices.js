@@ -3,22 +3,35 @@ import Article from '../models/Article.js'
 import User from '../models/User.js'
 import Notification from '../models/Notification.js'
 import mongoose from 'mongoose'
+import MyPhoto from '../models/MyPhoto.js'
 import { emitEvent } from '../sockets/socket.js'
+import { cloudStorageService } from './cloudStorageService.js'
 
 const getUserGroupsService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new Error('ID người dùng không hợp lệ.')
+    throw new Error('ID người dùng không hợp lệ.');
   }
 
   const userGroups = await Group.find({
     'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } }
-  }).populate('idAdmin', 'firstName lastName displayName avt')
+  })
+    .populate({
+      path: 'avt', // Lấy avatar của nhóm
+      model: 'MyPhoto',
+      select: 'name link type' // Chỉ lấy các trường cần thiết từ MyPhoto
+    })
+    .populate({
+      path: 'backGround', // Lấy background của nhóm
+      model: 'MyPhoto',
+      select: 'name link type' // Chỉ lấy các trường cần thiết từ MyPhoto
+    })
+    .lean();
 
-  return userGroups
-}
+  return userGroups;
+};
+
 
 // Service lấy tất cả bài viết từ các nhóm mà người dùng đã tham gia và được duyệt
-
 const getAllGroupArticlesService = async (userId, page, limit) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -45,11 +58,8 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
 
     if (processedArticleIds.length === 0) return [];
 
-    console.log(`Tổng số bài viết đã xử lý: ${processedArticleIds.length}`);
-    
     const skip = (page - 1) * limit;
-    console.log(`Trang ${page} với skip: ${skip}, limit: ${limit}`);
-
+    
     const articles = await Article.find({
       _id: { $in: processedArticleIds },
       _destroy: { $exists: false },
@@ -57,31 +67,47 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('createdBy', 'firstName lastName displayName avt')
-      .populate('groupID', 'groupName avt backGround')
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của createdBy
+      })
+      .populate({
+        path: 'groupID',
+        select: 'groupName avt backGround',
+        populate: [
+          { path: 'avt', select: 'name link type' },
+          { path: 'backGround', select: 'name link type' },
+        ],
+      })
       .populate({
         path: 'interact.comment',
         model: 'Comment',
         populate: [
-          { path: '_iduser', select: 'firstName lastName displayName avt' },
+          { 
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng comment
+          },
           {
             path: 'replyComment',
             model: 'Comment',
-            populate: { path: '_iduser', select: 'firstName lastName displayName avt' },
+            populate: {
+              path: '_iduser',
+              select: 'firstName lastName displayName avt',
+              populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng reply
+            },
           },
         ],
       })
+      .populate('listPhoto', 'name link type') // Lấy myPhoto trong listPhoto
       .lean();
-
-    console.log(`Số bài viết trả về (Trang ${page}): ${articles.length}`);
-    articles.forEach((article, index) => {
-      console.log(`Bài viết ${index + 1} (Page ${page}): ID: ${article._id}, Nội dung: ${article.content}`);
-    });
 
     return articles.map((article) => ({
       ...article,
       totalLikes: article.totalLikes || 0,
       totalComments: article.totalComments || 0,
+      listPhoto: article.listPhoto || [],
     }));
   } catch (error) {
     console.error('Lỗi khi lấy bài viết của nhóm:', error);
@@ -89,23 +115,14 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
   }
 };
 
-
-
-
-
-
-
-
-
-
-
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new Error('ID người dùng không hợp lệ.')
+      throw new Error('ID người dùng không hợp lệ.');
     }
 
+    // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
     const groups = await Group.find({
       $or: [
         { 'members.listUsers.idUser': { $ne: userId } },
@@ -116,23 +133,36 @@ const getNotJoinedGroupsService = async (userId) => {
         }
       ],
       _destroy: { $exists: false }
-    }).lean()
+    })
+    .populate({
+      path: 'avt',
+      model: 'MyPhoto',
+      select: 'name link type', // Populate avatar của nhóm
+    })
+    .populate({
+      path: 'backGround',
+      model: 'MyPhoto',
+      select: 'name link type', // Populate background của nhóm
+    })
+    .lean();
 
+    // Thêm trường userState cho biết trạng thái tham gia của người dùng trong nhóm
     const groupsWithUserState = groups.map((group) => {
       const userState =
         group.members.listUsers.find(
           (member) => member.idUser.toString() === userId
-        )?.state || 'not_joined'
+        )?.state || 'not_joined';
 
-      return { ...group, userState }
-    })
+      return { ...group, userState };
+    });
 
-    return groupsWithUserState
+    return groupsWithUserState;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error)
-    throw new Error('Không thể lấy danh sách nhóm chưa tham gia.')
+    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error);
+    throw new Error('Không thể lấy danh sách nhóm chưa tham gia.');
   }
-}
+};
+
 
 // Hàm tạo nhóm mới
 const createGroupService = async ({
@@ -143,15 +173,15 @@ const createGroupService = async ({
   avt,
   backGround,
   hobbies,
-  rule
+  rule,
 }) => {
   const newGroup = new Group({
     groupName,
     type,
     idAdmin,
     introduction,
-    avt,
-    backGround,
+    avt, // Lưu ObjectId của MyPhoto cho avt
+    backGround, // Lưu ObjectId của MyPhoto cho backGround
     hobbies,
     rule,
     members: {
@@ -159,17 +189,17 @@ const createGroupService = async ({
       listUsers: [
         {
           idUser: idAdmin,
-          state: 'accepted'
-        }
-      ]
+          state: 'accepted',
+        },
+      ],
     },
-    Administrators: []
-  })
+    Administrators: [],
+  });
 
-  const savedGroup = await newGroup.save()
+  const savedGroup = await newGroup.save();
+  return savedGroup;
+};
 
-  return savedGroup
-}
 
 // Hàm thêm một quản trị viên mới (Administrator) vào nhóm
 const addAdminService = async (groupId, adminId, currentUserId) => {
@@ -229,29 +259,87 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
   }
 }
 
-const getProcessedArticlesService = async (groupId) => {
-  if (!mongoose.Types.ObjectId.isValid(groupId)) {
-    throw new Error('ID nhóm không hợp lệ.')
+const getProcessedArticlesService = async (groupId, page, limit) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      throw new Error('ID nhóm không hợp lệ.');
+    }
+
+    // Tìm dữ liệu nhóm và populate idArticle trong listArticle
+    const groupData = await Group.findById(groupId).populate(
+      'article.listArticle.idArticle'
+    );
+
+    // Đảm bảo groupData tồn tại và listArticle là một mảng
+    if (!groupData || !Array.isArray(groupData.article.listArticle)) return [];
+
+    // Lọc các bài viết có trạng thái 'processed'
+    const processedArticleIds = groupData.article.listArticle
+      .filter((articleItem) => articleItem.state === 'processed' && !articleItem.idArticle._destroy)
+      .map((articleItem) => articleItem.idArticle._id);
+
+    if (processedArticleIds.length === 0) return [];
+
+    // Phân trang
+    const skip = (page - 1) * limit;
+
+    // Truy vấn các bài viết đã xử lý
+    const articles = await Article.find({
+      _id: { $in: processedArticleIds },
+      _destroy: { $exists: false },
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của createdBy
+      })
+      .populate({
+        path: 'groupID',
+        select: 'groupName avt backGround',
+        populate: [
+          { path: 'avt', select: 'name link type' },
+          { path: 'backGround', select: 'name link type' },
+        ],
+      })
+      .populate({
+        path: 'interact.comment',
+        model: 'Comment',
+        populate: [
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng comment
+          },
+          {
+            path: 'replyComment',
+            model: 'Comment',
+            populate: {
+              path: '_iduser',
+              select: 'firstName lastName displayName avt',
+              populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng reply
+            },
+          },
+        ],
+      })
+      .populate('listPhoto', 'name link type') // Lấy myPhoto trong listPhoto
+      .lean();
+
+    // Đảm bảo trả về các trường cần thiết cho mỗi bài viết
+    return articles.map((article) => ({
+      ...article,
+      totalLikes: article.totalLikes || 0,
+      totalComments: article.totalComments || 0,
+      listPhoto: article.listPhoto || [],
+    }));
+  } catch (error) {
+    console.error('Lỗi khi lấy bài viết đã xử lý của nhóm:', error);
+    throw new Error('Lỗi khi lấy bài viết đã xử lý của nhóm.');
   }
+};
 
-  const groupData = await Group.findById(groupId).populate(
-    'article.listArticle.idArticle'
-  )
-
-  const processedArticles = groupData.article.listArticle.filter(
-    (articleItem) =>
-      articleItem.state === 'processed' && !articleItem.idArticle._destroy
-  )
-
-  const articles = await Article.find({
-    _id: { $in: processedArticles.map((item) => item.idArticle) },
-    _destroy: { $exists: false }
-  })
-    .populate('createdBy', 'firstName lastName displayName avt')
-    .sort({ createdAt: -1 })
-
-  return articles
-}
 
 const createArticleService = async ({
   content,
@@ -260,9 +348,10 @@ const createArticleService = async ({
   scope,
   state,
   hashTag,
-  images
+  listPhoto
 }) => {
   try {
+    // Tạo bài viết mới
     const newArticle = new Article({
       content,
       createdBy: userId,
@@ -270,15 +359,13 @@ const createArticleService = async ({
       scope,
       state: state || 'pending',
       hashTag,
-      listPhoto: images,
-      interact: {
-        emoticons: [],
-        comment: []
-      }
-    })
+      listPhoto, // Sử dụng danh sách ObjectId của MyPhoto
+      interact: { emoticons: [], comment: [] }
+    });
 
-    const savedArticle = await newArticle.save()
+    const savedArticle = await newArticle.save();
 
+    // Cập nhật danh sách bài viết trong nhóm
     const updatedGroup = await Group.findByIdAndUpdate(
       groupId,
       {
@@ -290,42 +377,61 @@ const createArticleService = async ({
         }
       },
       { new: true }
-    )
+    );
 
     if (!updatedGroup) {
-      throw new Error('Không tìm thấy nhóm để cập nhật bài viết.')
+      throw new Error('Không tìm thấy nhóm để cập nhật bài viết.');
     }
 
-    return savedArticle
+    return {
+      ...savedArticle.toObject(),
+      createdBy: {
+        _id: userId,
+      },
+      listPhoto: await MyPhoto.find({ _id: { $in: listPhoto } }).select('name link type'), // Trả về chi tiết ảnh
+      interact: {
+        emoticons: savedArticle.interact.emoticons || [],
+        comment: savedArticle.interact.comment || []
+      }
+    };
   } catch (error) {
-    console.error('Lỗi khi tạo bài viết:', error.message)
-    throw new Error(error.message)
+    console.error('Lỗi khi tạo bài viết:', error.message);
+    throw new Error('Lỗi khi tạo bài viết.');
   }
-}
+};
 
 const getPendingArticlesService = async (groupId) => {
   try {
-    const group = await Group.findById(groupId)
-    if (!group) throw new Error('Nhóm không tồn tại.')
+    const group = await Group.findById(groupId);
+    if (!group) throw new Error('Nhóm không tồn tại.');
 
     const pendingArticleIds = group.article.listArticle
       .filter((article) => article.state === 'pending')
-      .map((article) => article.idArticle)
+      .map((article) => article.idArticle);
 
-    if (pendingArticleIds.length === 0) return []
+    if (pendingArticleIds.length === 0) return [];
 
     const pendingArticles = await Article.find({
       _id: { $in: pendingArticleIds }
     })
-      .populate('createdBy', 'firstName lastName avt displayName')
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: { path: 'avt', select: 'name link type' } // Populate để lấy myPhoto của createdBy
+      })
+      .populate({
+        path: 'listPhoto',
+        select: 'name link type', // Lấy thông tin myPhoto của listPhoto
+      })
       .sort({ createdAt: -1 })
+      .lean(); // Chuyển đổi Document sang Object JS thuần tuý để xử lý dễ dàng hơn
 
-    return pendingArticles
+    return pendingArticles;
   } catch (error) {
-    console.error('Lỗi khi lấy bài viết pending:', error.message)
-    throw new Error(error.message)
+    console.error('Lỗi khi lấy bài viết pending:', error.message);
+    throw new Error(error.message);
   }
-}
+};
 
 // Cập nhật trạng thái bài viết
 const updateArticleStateService = async (groupId, articleId, newState) => {
@@ -383,24 +489,33 @@ const checkUserPermission = async (userId, groupId) => {
 
 const getGroupMembersService = async (groupId) => {
   if (!mongoose.Types.ObjectId.isValid(groupId)) {
-    throw new Error('ID nhóm không hợp lệ.')
+    throw new Error('ID nhóm không hợp lệ.');
   }
 
-  // Tìm nhóm dựa trên groupId
+  // Tìm nhóm dựa trên groupId và populate các trường của thành viên
   const group = await Group.findById(groupId)
-    .populate('members.listUsers.idUser', 'firstName lastName displayName avt')
-    .select('members')
+    .populate({
+      path: 'members.listUsers.idUser',
+      select: 'firstName lastName displayName avt backGround',
+      populate: [
+        { path: 'avt', select: 'name link type' }, // Lấy MyPhoto của avatar
+        { path: 'backGround', select: 'name link type' } // Lấy MyPhoto của background
+      ]
+    })
+    .select('members');
 
   if (!group) {
-    throw new Error('Nhóm không tồn tại.')
+    throw new Error('Nhóm không tồn tại.');
   }
 
+  // Lọc các thành viên có trạng thái 'accepted'
   const acceptedMembers = group.members.listUsers.filter(
     (member) => member.state === 'accepted'
-  )
+  );
 
-  return acceptedMembers
-}
+  return acceptedMembers;
+};
+
 
 const removeMemberService = async (groupId, memberId) => {
   if (
@@ -470,29 +585,7 @@ const updateGroupRulesService = async (groupId, rules, userId) => {
 
   return group
 }
-// Thêm quản trị viên
-const getRequestsService = async (groupId) => {
-  if (!mongoose.Types.ObjectId.isValid(groupId)) {
-    throw new Error('ID nhóm không hợp lệ.')
-  }
 
-  const group = await Group.findById(groupId)
-    .populate(
-      'members.listUsers.idUser',
-      'displayName email avt account.email hobbies'
-    )
-    .select('members.listUsers')
-
-  if (!group) {
-    throw new Error('Nhóm không tồn tại.')
-  }
-
-  const requests = group.members.listUsers.filter(
-    (user) => user.state === 'pending'
-  )
-
-  return requests
-}
 
 const acceptInviteService = async (groupId, userId) => {
   if (
@@ -592,37 +685,47 @@ const rejectInviteService = async (groupId, userId) => {
 }
 
 const getAvailableMembersService = async (groupId) => {
-  // Kiểm tra tính hợp lệ của groupId
   if (!mongoose.Types.ObjectId.isValid(groupId)) {
-    throw new Error('ID nhóm không hợp lệ.')
+    throw new Error('ID nhóm không hợp lệ.');
   }
 
-  // Tìm nhóm và chuyển đổi dữ liệu
   const group = await Group.findById(groupId)
-    .populate('members.listUsers.idUser', 'displayName avt')
-    .lean()
+    .populate({
+      path: 'members.listUsers.idUser',
+      select: 'displayName avt',
+      populate: {
+        path: 'avt', // populate toàn bộ mảng avt
+        select: 'name link type', // Lấy thông tin của mỗi MyPhoto trong avt
+      }
+    })
+    .lean();
+
   if (!group) {
-    throw new Error('Nhóm không tồn tại.')
+    throw new Error('Nhóm không tồn tại.');
   }
 
-  // Lọc danh sách thành viên đã được chấp nhận (state: 'accepted') và không phải là idAdmin hoặc Administrators
   const availableMembers = group.members.listUsers.filter(
     (member) =>
       member.state === 'accepted' &&
-      member.idUser._id.toString() !== group.idAdmin.toString() && // Loại trừ idAdmin
+      member.idUser._id.toString() !== group.idAdmin.toString() &&
       !group.Administrators.some(
         (admin) => admin.idUser.toString() === member.idUser._id.toString()
-      ) // Loại trừ các admin hiện tại
-  )
+      )
+  );
 
-  // Chuyển đổi dữ liệu thành định dạng mong muốn
   return availableMembers.map((member) => ({
-    idUser: member.idUser._id.toString(), // Chuyển đổi ObjectId thành chuỗi
+    idUser: member.idUser._id.toString(),
     displayName: member.idUser.displayName,
-    avt: member.idUser.avt || [],
-    joinDate: new Date(member.joinDate).toISOString() // Chuyển đổi Date thành ISO String
-  }))
-}
+    avt: member.idUser.avt.map(photo => ({
+      name: photo.name,
+      link: photo.link,
+      type: photo.type
+    })), // Duyệt qua mỗi ảnh trong mảng avt để lấy thông tin chi tiết
+    joinDate: new Date(member.joinDate).toISOString()
+  }));
+};
+
+
 const cancelInviteService = async (groupId, userId, currentUserId) => {
   if (
     !mongoose.Types.ObjectId.isValid(userId) ||
@@ -656,60 +759,185 @@ const cancelInviteService = async (groupId, userId, currentUserId) => {
 
 // Lấy danh sách lời mời đang chờ xác nhận
 const getPendingInvitesService = async (groupId) => {
-  const group = await Group.findById(groupId).populate(
-    'Administrators.idUser',
-    'displayName avt'
-  )
-  if (!group) {
-    throw new Error('Nhóm không tồn tại.')
-  }
-
-  const pendingInvites = group.Administrators.filter(
-    (admin) => admin.state === 'pending'
-  )
-  return pendingInvites
-}
-
-const getAcceptedAdministratorsService = async (groupId) => {
-  // Tìm nhóm theo `groupId`
   const group = await Group.findById(groupId).populate({
     path: 'Administrators.idUser',
-    select: 'displayName avt'
-  })
+    select: 'displayName avt',
+    populate: {
+      path: 'avt',
+      select: 'link' // Chỉ lấy link của MyPhoto trong avatar
+    },
+  });
 
   if (!group) {
-    throw new Error('Nhóm không tồn tại.')
+    throw new Error('Nhóm không tồn tại.');
+  }
+
+  // Lọc danh sách lời mời đang chờ xác nhận
+  const pendingInvites = group.Administrators.filter(
+    (admin) => admin.state === 'pending'
+  );
+
+  // Định dạng lại kết quả để giữ nguyên cấu trúc
+  return pendingInvites.map((invite) => ({
+    idUser: {
+      _id: invite.idUser._id.toString(),
+      displayName: invite.idUser.displayName,
+      avt: invite.idUser.avt && invite.idUser.avt.length > 0
+        ? invite.idUser.avt[invite.idUser.avt.length - 1].link // Lấy link của ảnh cuối cùng trong avt
+        : null,
+    },
+    state: invite.state,
+    joinDate: invite.joinDate ? invite.joinDate.toISOString() : null, // Giữ joinDate nếu có
+    _id: invite._id.toString(),
+  }));
+};
+
+const getRequestsService = async (groupId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) {
+    throw new Error('ID nhóm không hợp lệ.');
+  }
+
+  const group = await Group.findById(groupId)
+    .populate({
+      path: 'members.listUsers.idUser',
+      select: 'displayName account.email avt hobbies',
+      populate: {
+        path: 'avt',
+        select: 'link' // Chỉ lấy link của MyPhoto trong avatar
+      },
+    })
+    .select('members.listUsers');
+
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.');
+  }
+
+  // Lọc danh sách người dùng có trạng thái 'pending' và định dạng kết quả trả về
+  const requests = group.members.listUsers
+    .filter((user) => user.state === 'pending')
+    .map((user) => ({
+      idUser: {
+        _id: user.idUser._id.toString(),
+        account: { email: user.idUser.account.email },
+        avt: user.idUser.avt ? user.idUser.avt.map((photo) => photo.link) : [],
+        hobbies: user.idUser.hobbies || [],
+        displayName: user.idUser.displayName,
+      },
+      state: user.state,
+      joinDate: user.joinDate ? user.joinDate.toISOString() : null,
+      _id: user._id.toString(), // ID của lời mời
+    }));
+
+  return requests;
+};
+
+
+const getAcceptedAdministratorsService = async (groupId) => {
+  // Tìm nhóm theo `groupId` và populate thông tin cần thiết
+  const group = await Group.findById(groupId).populate({
+    path: 'Administrators.idUser',
+    select: 'displayName avt',
+    populate: {
+      path: 'avt',
+      select: 'name link type' // Chỉ lấy thông tin cần thiết từ MyPhoto của avatar
+    },
+  });
+
+  if (!group) {
+    throw new Error('Nhóm không tồn tại.');
   }
 
   // Lọc ra các quản trị viên có trạng thái đã được chấp nhận
   const acceptedAdministrators = group.Administrators.filter(
     (admin) => admin.state === 'accepted'
-  )
+  );
 
-  return acceptedAdministrators
-}
+  // Định dạng kết quả trả về
+  return acceptedAdministrators.map((admin) => ({
+    idUser: {
+      _id: admin.idUser._id.toString(),
+      displayName: admin.idUser.displayName,
+      avt: admin.idUser.avt && admin.idUser.avt.length > 0
+        ? admin.idUser.avt[admin.idUser.avt.length - 1].link // Lấy link của ảnh cuối cùng trong avt
+        : null,
+    },
+    state: admin.state,
+    joinDate: admin.joinDate ? admin.joinDate.toISOString() : null, // Lấy joinDate nếu có
+    _id: admin._id.toString(),
+  }));
+};
 
-const getUserArticlesInGroupService = async (groupId, userId) => {
-  // Kiểm tra tính hợp lệ của `groupId` và `userId`
-  if (!mongoose.Types.ObjectId.isValid(groupId)) {
-    throw new Error('ID nhóm không hợp lệ.')
+const getUserArticlesInGroupService = async (groupId, userId, page = 1, limit = 10) => {
+  try {
+    // Kiểm tra tính hợp lệ của `groupId` và `userId`
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      throw new Error('ID nhóm không hợp lệ.');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ.');
+    }
+
+    // Phân trang
+    const skip = (page - 1) * limit;
+
+    // Tìm các bài viết của người dùng trong nhóm cụ thể
+    const articles = await Article.find({
+      groupID: groupId,
+      createdBy: userId, // Chỉ lấy bài viết của người dùng cụ thể trong nhóm đã chỉ định
+      _destroy: { $exists: false } // Bỏ qua các bài viết bị xóa mềm
+    })
+      .sort({ createdAt: -1 }) // Sắp xếp theo thời gian mới nhất
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: { path: 'avt', select: 'name link type' },
+      })
+      .populate({
+        path: 'groupID',
+        select: 'groupName avt backGround',
+        populate: [
+          { path: 'avt', select: 'name link type' },
+          { path: 'backGround', select: 'name link type' },
+        ],
+      })
+      .populate({
+        path: 'interact.comment',
+        model: 'Comment',
+        populate: [
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: { path: 'avt', select: 'name link type' },
+          },
+          {
+            path: 'replyComment',
+            model: 'Comment',
+            populate: {
+              path: '_iduser',
+              select: 'firstName lastName displayName avt',
+              populate: { path: 'avt', select: 'name link type' },
+            },
+          },
+        ],
+      })
+      .populate('listPhoto', 'name link type') // Lấy danh sách ảnh trong bài viết
+      .lean();
+
+    // Đảm bảo trả về các trường cần thiết cho mỗi bài viết
+    return articles.map((article) => ({
+      ...article,
+      totalLikes: article.totalLikes || 0,
+      totalComments: article.totalComments || 0,
+      listPhoto: article.listPhoto || [],
+    }));
+  } catch (error) {
+    console.error('Lỗi khi lấy bài viết của người dùng trong nhóm:', error);
+    throw new Error('Lỗi khi lấy bài viết của người dùng trong nhóm.');
   }
-
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new Error('ID người dùng không hợp lệ.')
-  }
-
-  // Tìm các bài viết của người dùng trong nhóm cụ thể
-  const articles = await Article.find({
-    groupID: groupId,
-    createdBy: userId // Chỉ lấy bài viết của người dùng cụ thể trong nhóm đã chỉ định
-  })
-    .populate('createdBy', 'firstName lastName displayName avt') // Lấy thông tin người tạo bài viết
-    .populate('groupID', 'groupName avt backGround') // Lấy thông tin nhóm
-    .sort({ createdAt: -1 }) // Sắp xếp theo thời gian mới nhất
-
-  return articles
-}
+};
 
 const getUserPendingInvitesService = async (groupId, userId) => {
   if (
@@ -949,32 +1177,54 @@ const editGroupService = async ({
   rule
 }) => {
   // Tìm nhóm theo ID và kiểm tra tính hợp lệ
-  const group = await Group.findById(groupId)
+  const group = await Group.findById(groupId);
   if (!group) {
-    throw new Error('Nhóm không tồn tại.')
+    throw new Error('Nhóm không tồn tại.');
+  }
+
+  // Xóa ảnh cũ khỏi Google Cloud Storage và cập nhật `MyPhoto` nếu có ảnh mới
+  if (avt) {
+    if (group.avt) {
+      const oldPhoto = await MyPhoto.findById(group.avt);
+      if (oldPhoto) {
+        // Xóa ảnh cũ trên Google Cloud Storage
+        await cloudStorageService.deleteImageFromStorage(oldPhoto.link);
+        // Đánh dấu `_destroy` trong `MyPhoto`
+        await MyPhoto.findByIdAndUpdate(oldPhoto._id, { _destroy: new Date() });
+      }
+    }
+    group.avt = avt;
+  }
+
+  if (backGround) {
+    if (group.backGround) {
+      const oldBackgroundPhoto = await MyPhoto.findById(group.backGround);
+      if (oldBackgroundPhoto) {
+        // Xóa ảnh cũ trên Google Cloud Storage
+        await cloudStorageService.deleteImageFromStorage(oldBackgroundPhoto.link);
+        // Đánh dấu `_destroy` trong `MyPhoto`
+        await MyPhoto.findByIdAndUpdate(oldBackgroundPhoto._id, { _destroy: new Date() });
+      }
+    }
+    group.backGround = backGround;
   }
 
   // Cập nhật các trường nếu có
-  if (groupName) group.groupName = groupName
-  if (introduction) group.introduction = introduction
-  if (avt) group.avt = avt
-  if (backGround) group.backGround = backGround
+  if (groupName) group.groupName = groupName;
+  if (introduction) group.introduction = introduction;
 
   // Kiểm tra `hobbies` và cập nhật hoặc xóa
   if (Array.isArray(hobbies)) {
-    if (hobbies.length === 0) {
-      group.hobbies = [] // Đặt thành mảng rỗng để xóa tất cả
-    } else {
-      group.hobbies = hobbies // Nếu có phần tử, cập nhật `hobbies`
-    }
+    group.hobbies = hobbies.length === 0 ? [] : hobbies;
   }
 
-  if (rule) group.rule = rule
+  if (rule) group.rule = rule;
 
   // Lưu lại nhóm sau khi cập nhật
-  const updatedGroup = await group.save()
-  return updatedGroup
-}
+  const updatedGroup = await group.save();
+  return updatedGroup;
+};
+
 
 // Service xóa nhóm và các dữ liệu liên quan
 const deleteGroupService = async (groupId, userId) => {
@@ -1087,33 +1337,38 @@ const getFriendsNotInGroupService = async (userId, groupId) => {
       !mongoose.Types.ObjectId.isValid(userId) ||
       !mongoose.Types.ObjectId.isValid(groupId)
     ) {
-      throw new Error('ID người dùng hoặc ID nhóm không hợp lệ.')
+      throw new Error('ID người dùng hoặc ID nhóm không hợp lệ.');
     }
 
-    // Lấy thông tin bạn bè của người dùng
-    const user = await User.findById(userId).populate(
-      'friends.idUser',
-      'firstName lastName displayName avt'
-    )
+    // Lấy thông tin bạn bè của người dùng cùng với thông tin chi tiết của ảnh đại diện
+    const user = await User.findById(userId).populate({
+      path: 'friends.idUser',
+      select: 'firstName lastName displayName avt',
+      populate: {
+        path: 'avt',
+        select: 'name link type', // Lấy chi tiết MyPhoto cho avatar
+      },
+    });
+
     if (!user) {
-      throw new Error('Người dùng không tồn tại.')
+      throw new Error('Người dùng không tồn tại.');
     }
 
     // Lấy danh sách thành viên của nhóm
-    const group = await Group.findById(groupId).select('members.listUsers')
+    const group = await Group.findById(groupId).select('members.listUsers');
     if (!group) {
-      throw new Error('Nhóm không tồn tại.')
+      throw new Error('Nhóm không tồn tại.');
     }
 
     // Kiểm tra xem danh sách bạn bè có tồn tại hay không
     if (!user.friends || user.friends.length === 0) {
-      throw new Error('Người dùng không có bạn bè.')
+      throw new Error('Người dùng không có bạn bè.');
     }
 
     // Lọc danh sách bạn bè chưa tham gia nhóm
     const groupMemberIds = group.members.listUsers.map((member) =>
       member.idUser.toString()
-    )
+    );
 
     const friendsNotInGroup = user.friends
       .filter(
@@ -1124,18 +1379,22 @@ const getFriendsNotInGroupService = async (userId, groupId) => {
       .map((friend) => ({
         _id: friend.idUser._id,
         displayName: friend.idUser.displayName,
-        avt: friend.idUser.avt || ''
-      }))
+        avt:
+          friend.idUser.avt && friend.idUser.avt.length > 0
+            ? friend.idUser.avt[friend.idUser.avt.length - 1].link // Lấy link của ảnh cuối cùng trong avt nếu có
+            : '', // Trả về chuỗi rỗng nếu không có ảnh
+      }));
 
-    return friendsNotInGroup
+    return friendsNotInGroup;
   } catch (error) {
     console.error(
       'Lỗi khi lấy danh sách bạn bè chưa tham gia nhóm:',
       error.message || error
-    )
-    throw new Error('Lỗi khi lấy danh sách bạn bè chưa tham gia nhóm.')
+    );
+    throw new Error('Lỗi khi lấy danh sách bạn bè chưa tham gia nhóm.');
   }
-}
+};
+
 const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
   try {
     // Kiểm tra ID hợp lệ
@@ -1211,6 +1470,8 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
   }
 }
 
+
+
 export const groupService = {
   getUserGroupsService,
   getAllGroupArticlesService,
@@ -1244,5 +1505,5 @@ export const groupService = {
   deleteGroupService,
   leaveGroupService,
   getFriendsNotInGroupService,
-  inviteFriendsToGroupService
+  inviteFriendsToGroupService,
 }
