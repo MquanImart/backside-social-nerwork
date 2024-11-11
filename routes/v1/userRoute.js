@@ -24,7 +24,7 @@ Router.patch('/:userId',
 Router.get('/:userId/friends-data', userController.getUserDataFriends)
 Router.get('/:userId/follower-data', userController.getUserDataFollower)
 Router.get('/hobbies/:userId', userController.getUserHobbies)
-
+Router.get('/friends/:userId', userController.getFriendUser)
 
 
 export const userRoute = Router

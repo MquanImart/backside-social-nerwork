@@ -28,6 +28,29 @@ const getUserByIdService = async (userId) => {
   }
 }
 
+const getFriendUser = async (userId) => {
+
+  const user = await User.findById(userId).select('-_destroy -__v') // Chọn không trả về các trường không cần thiết
+  if (!user) {
+    throw new Error('Người dùng không tồn tại')
+  }
+
+  const friendData = await Promise.all(user.friends.map(async (_friend)=> {
+    const friend = await User.findById(_friend.idUser);
+    const avt = await MyPhoto.findById(friend.avt[friend.avt.length - 1]);
+    return {
+      _id: friend._id,
+      avt: avt,
+      name: friend.displayName,
+      status: friend.status
+    }
+  }))
+
+  return {
+    friendData: friendData
+  }
+}
+
 // Hàm lấy bài viết trong bộ sưu tập của người dùng
 const getArticlesByCollectionIdService = async (userId, collectionId) => {
   // Tìm người dùng theo userId
@@ -304,4 +327,5 @@ export const userService = {
   getUserDataFollower,
   updateUser,
   getUserHobbies,
+  getFriendUser,
 }
