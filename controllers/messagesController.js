@@ -94,11 +94,24 @@ const getAllMessagesByUserID = async (req, res) => {
       res.status(500).json({ error: 'Failed to create conversation' });
     }
   };
+
+  const getUnreadMessage = async (req, res) => {
+    const userID = req.params.userID;
+    try {
+      const {success, data, message} = await messageService.getUnreadMessageService(userID);
+      res.status(200).json({success, data, message});
+
+    } catch (error) {
+      console.error('Lỗi khi tạo hộp thoại mới:', error);
+      res.status(500).json({success, message});
+    }
+  };
 export const messageController = {
     getAllMessagesByUserID,
     getMessageWithFriend,
     readMessage,
     sendMessage,
     createNewMessages,
-    getAllFriendsWithoutChat
+    getAllFriendsWithoutChat,
+    getUnreadMessage
 }

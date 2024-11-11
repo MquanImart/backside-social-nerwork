@@ -8,7 +8,8 @@ import axios from 'axios'
 import FormData from 'form-data'
 import MyPhoto from '../models/MyPhoto.js'
 import { Readable } from 'stream'
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
+import {emitEvent} from '../sockets/socket.js'
 
 // Convert buffer to readable stream
 const bufferToStream = (buffer) => {
@@ -27,6 +28,10 @@ const calculateAge = (birthDate) => {
     age--
   }
   return age
+}
+function parseDate(inputDate) {
+  const [day, month, year] = inputDate.split('/');
+  return new Date(`${year}-${month}-${day}`);
 }
 
 const checkCCCDService = async (cccdFile) => {
@@ -119,13 +124,13 @@ const registerService = async ({
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
+    const newDate = parseDate(birthDate);
     const newUser = new User({
       account: { email, password: hashedPassword },
       firstName,
       lastName,
       userName,
-      details: { phoneNumber, address, gender: genderBoolean, birthDate },
+      details: { phoneNumber, address, gender: genderBoolean, newDate },
       hobbies
     });
 
@@ -194,12 +199,19 @@ const loginService = async (email, password) => {
     if (!isMatch) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
+    //Cập nhật trạng thái online
+    await User.findByIdAndUpdate(user._id, { status: 'online' });
 
     const token = jwt.sign(
       { id: user._id, email: user.account.email },
       env.JWT_SECRET,
       { expiresIn: '2h' }
     )
+    //socket online
+    emitEvent(`status-user-${user._id}`, {
+      _id: user._id,
+      status: "online"
+    });
 
     return {
       success: true,
@@ -231,7 +243,12 @@ const logoutService = async (req) => {
         sameSite: 'Strict'
       })
     }
-
+    const userId = req.params.userId;
+    await User.findByIdAndUpdate(userId, { status: 'active' });
+    emitEvent(`status-user-${userId}`, {
+      _id: userId,
+      status: "active"
+    });
     return {
       success: true,
       message: 'Đăng xuất thành công!'

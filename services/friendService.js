@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js';
 import AddFriends from '../models/AddFriends.js';
+import MyPhoto from '../models/MyPhoto.js';
 
 const getAllFriendByIdUser = async (userId) => {
     try {
@@ -13,10 +14,11 @@ const getAllFriendByIdUser = async (userId) => {
         
         const resultData = await Promise.all(user.friends.map(async (friend) => {
             const friendData = await User.findById(friend.idUser);
+            const avt = await MyPhoto.findById(friendData.avt[user.avt.length - 1]);
             return {         
                 idUser: friend.idUser,       
                 addDate: friend.addDate,
-                avt: friendData.avt,
+                avt: avt,
                 name: friendData.displayName,
                 aboutMe: friendData.aboutMe
             };
@@ -63,9 +65,10 @@ const getSuggestAddFriend= async (userId, page) => {
         .limit(10);
 
         const resultData = await Promise.all(usersNotInFriends.map(async (user) => {
+          const avt = await MyPhoto.findById(usersNotInFriends.avt[user.avt.length - 1]);
             return {        
                 idUser: user._id,       
-                avt: user.avt,
+                avt: avt,
                 name: user.displayName,
                 aboutMe: user.aboutMe
             };
@@ -119,10 +122,11 @@ const getAllFriendRequest = async (userId, page) => {
       .limit(10);
       const result = await Promise.all(friendRequest.map(async (friendreq) => {
         const friend = await User.findById(friendreq.senderId);
+        const avt = await MyPhoto.findById(friend.avt[user.avt.length - 1]);
         return {
             _id: friendreq._id,        
             idUser: friendreq.senderId,       
-            avt: friend.avt,
+            avt: avt,
             addDate: friendreq.createdAt,
             name: friend.displayName,
             aboutMe: friend.aboutMe
@@ -214,10 +218,11 @@ const getMyRequest = async (userId, page) => {
 
       const resultData = await Promise.all(myRequest.map(async (request) => {
         const user = await User.findById(request.receiverId);
+        const avt = await MyPhoto.findById(user.avt[user.avt.length - 1]);
           return {   
               _id: request._id,     
               idUser: user._id,       
-              avt: user.avt,
+              avt: avt,
               name: user.displayName,
               aboutMe: user.aboutMe
           };

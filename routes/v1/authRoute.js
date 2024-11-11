@@ -19,7 +19,7 @@ Router.post(
   authController.registerUser
 )
 
-Router.post('/logout', verifyToken, authController.logout)
+Router.post('/logout/:userId', verifyToken, authController.logout)
 
 // Route đăng nhập với admin
 Router.post('/login-admin', authController.loginAdmin)

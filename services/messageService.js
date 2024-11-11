@@ -1,6 +1,9 @@
 import Conversation from '../models/Conversation.js'
+import MyPhoto from '../models/MyPhoto.js';
 import User from '../models/User.js';
 import mongoose from 'mongoose';
+import {emitEvent} from '../sockets/socket.js'
+
 const getAllMessagesByID = async (userID) => {
   try {
     const conversations = await Conversation.find();
@@ -16,9 +19,17 @@ const getAllMessagesByID = async (userID) => {
         const userPromises = message._user.map(async (id) => {
             if (id.toString() !== userID) {
                 const user = await User.findById(id);
+                if (user.avt.length > 0){
+                  const avt = await MyPhoto.findById(user.avt[user.avt.length - 1])
+                  return {
+                    userID: user._id,
+                    avt: avt,
+                    name: user.displayName ? user.displayName : user.userName
+                  };
+                }
                 return {
                     userID: user._id,
-                    avt: user.avt,
+                    avt: null,
                     name: user.displayName ? user.displayName : user.userName
                 };
             }
@@ -56,9 +67,17 @@ const getMessageWithFriend = async (userID, friendID) => {
     const resultData = await Promise.all(messages.map(async (message) => {
         const userPromises = message._user.map(async (id) => {
             const user = await User.findById(id);
+            if (user.avt.length > 0){
+              const avt = await MyPhoto.findById(user.avt[user.avt.length - 1])
+              return {
+                userID: user._id,
+                avt: avt,
+                name: user.displayName ? user.displayName : user.userName
+              };
+            }
             return {
                 userID: user._id,
-                avt: user.avt,
+                avt: null,
                 name: user.displayName ? user.displayName : user.userName
             };
         });
@@ -86,10 +105,15 @@ const readMessage = async (conversationID, userID) => {
     
     if (conversation.content.length > 0){
       const lastMessage = conversation.content[conversation.content.length - 1];
-      if (lastMessage.userId.toString() !== userID.toString()) { 
-        lastMessage.viewDate = new Date();
 
+      if (lastMessage.userId.toString() !== userID.toString() && lastMessage.viewDate === null) { 
+        lastMessage.viewDate = new Date();
         await conversation.save();
+
+        emitEvent(`read-massages-${userID.toString()}`, {    
+          newContent: lastMessage, 
+        });
+
         return true;
       }
     }
@@ -108,10 +132,27 @@ const sendMessage = async (conversationID, content) => {
 
     if (!conversation) {
       throw new Error('Conversation not found');
-    }
+    }content
+    // Tìm _user đầu tiên không có trong danh sách messageUserIds 
+    const friend = await conversation._user.find(userId => content.userId !== userId.toString());
 
     conversation.content.push(content);
     await conversation.save();
+
+    emitEvent(`chat-list-${conversation._id}`, {
+      _id: conversation._id,           
+      content: conversation.content.length > 0? conversation.content[conversation.content.length - 1] : null, 
+    });
+
+    emitEvent(`conversation-${conversation._id}`, {
+      _id: conversation._id,           
+      newContent: conversation.content.length > 0? conversation.content[conversation.content.length - 1] : null, 
+    });
+
+    emitEvent(`unread-massages-${friend.toString()}`, {    
+      newContent: conversation.content.length > 0? conversation.content[conversation.content.length - 1] : null, 
+    });
+
     return conversation;
   }catch (error) {
     console.error('Error retrieving messages:', error);
@@ -138,14 +179,29 @@ const createConversation = async (userID, friendID, message) => {
 
     const userPromises = newConversation._user.map(async (id) => {
         const user = await User.findById(id);
+        if (user.avt.length > 0){
+          const avt = await MyPhoto.findById(user.avt[user.avt.length - 1])
+          return {
+            userID: user._id,
+            avt: avt,
+            name: user.displayName ? user.displayName : user.userName
+          };
+        }
         return {
             userID: user._id,
-            avt: user.avt,
+            avt: null,
             name: user.displayName ? user.displayName : user.userName
         };
     });
   
     const users = await Promise.all(userPromises);
+
+    emitEvent(`new-messages-${friendID}`, {
+      _id: newConversation._id,
+      _user: newConversation._user,
+      content: newConversation.content[newConversation.content.length - 1],
+      dataUser: users.filter(user => user !== null)
+    });
 
     return {
         _id: newConversation._id,
@@ -177,19 +233,21 @@ const getAllFriendWithoutChat = async (userID) => {
         userInConversations.add(id.toString());
       });
     });
-
+    
     const friendsWithoutChat = friendIds.filter(friendId => !userInConversations.has(friendId));
     const usersWithoutChat = await User.find({
       _id: { $in: friendsWithoutChat }
     });
-    
-    const result = usersWithoutChat.map((userItem) => ({
-      _id: userItem._id,
-      avt: userItem.avt,
-      displayName: userItem.displayName,
-      userName: userItem.userName,
-    }));
-    
+    const result = await Promise.all(usersWithoutChat.map(async (userItem) => {
+          const avt = await MyPhoto.findById(userItem.avt[user.avt.length - 1]);
+          return {
+          _id: userItem._id,
+          avt: avt,
+          displayName: userItem.displayName,
+          userName: userItem.userName,
+        }
+      }));
+
     return result;
 
   } catch (error) {
@@ -197,6 +255,41 @@ const getAllFriendWithoutChat = async (userID) => {
     throw error;
   }
 }
+const getUnreadMessageService = async (userID) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(userID)) {
+      return {
+        success: false,
+        message: 'ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ'
+      }
+    }
+
+    const conversations = await Conversation.find({
+      _user: userID, // Lọc conversations chứa userID trong _user
+      "content.viewDate": null // Tìm những conversations có ít nhất một message chưa xem
+    });
+    const userObjectId = new mongoose.Types.ObjectId(userID);
+    // Lọc thêm để lấy những conversations có phần tử cuối cùng trong content có viewDate là null
+    const unreadConversations = conversations.filter(conversation => {
+      const lastMessage = conversation.content[conversation.content.length - 1];
+      if (lastMessage.viewDate === null && !lastMessage.userId.equals(userObjectId)){
+        return lastMessage;
+      }
+    });
+    // Trả về số lượng các conversations chưa đọc
+    return {
+      success: true,
+      data: unreadConversations.map((conversation) => (conversation.content[conversation.content.length - 1])),
+      message: 'Thành công lấy số lượng tin nhắn chưa đọc'
+    }
+  } catch (error) {
+    console.error('Error retrieving unread messages:', error);
+    return {
+      success: false,
+      message: 'Lỗi trong khi lấy số lượng tin nhắn chưa đọc',
+    }
+  }
+};
 
 export const messageService = {
     getAllMessagesByID,
@@ -204,5 +297,6 @@ export const messageService = {
     readMessage,
     sendMessage,
     createConversation,
-    getAllFriendWithoutChat
+    getAllFriendWithoutChat,
+    getUnreadMessageService
 }

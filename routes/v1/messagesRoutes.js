@@ -8,5 +8,6 @@ Router.put('/read-message/:ConversationID/:UserId', messageController.readMessag
 Router.put('/send-message/:ConversationID', messageController.sendMessage);
 Router.post('/create-conversation', messageController.createNewMessages);
 Router.get('/friends/newchat/:userID', messageController.getAllFriendsWithoutChat);
+Router.get('/friends/unread/:userID', messageController.getUnreadMessage);
 
 export const messagesRoute = Router
