@@ -1470,6 +1470,85 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
   }
 }
 
+const getAllGroupsService = async () => {
+  try {
+    const groups = await Group.find({})
+      .populate({
+        path: 'avt', // Lấy avatar của nhóm
+        select: 'name link type', // Chỉ lấy các trường cần thiết
+      })
+      .populate({
+        path: 'backGround', // Lấy background của nhóm
+        select: 'name link type', // Chỉ lấy các trường cần thiết
+      })
+      .lean(); // Sử dụng lean() để trả về Object JS thuần tuý
+
+    // Format lại thông tin nhóm để chỉ trả về các trường cần thiết
+    const formattedGroups = groups.map((group) => ({
+      _id: group._id,
+      groupName: group.groupName,
+      warningLevel: group.warningLevel,
+      type: group.type,
+      idAdmin: group.idAdmin,
+      introduction: group.introduction || '',
+      avt: group.avt ? group.avt.link : null,
+      backGround: group.backGround ? group.backGround.link : null,
+      members: {
+        count: group.members?.count || 0,
+        listUsers: group.members?.listUsers?.map((user) => ({
+          idUser: user.idUser || '',
+          state: user.state || 'pending',
+          joinDate: user.joinDate || '',
+        })) || [],
+      },
+      article: {
+        count: group.article?.count || 0,
+        listArticle: group.article?.listArticle?.map((article) => ({
+          idArticle: article.idArticle || '',
+          state: article.state || '',
+        })) || [],
+      },
+      hobbies: group.hobbies || [],
+      rule: group.rule || [],
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt || null,
+      _destroy: !!group._destroy, // Check if the group has been deleted
+    }));
+    
+
+    return formattedGroups;
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách nhóm:', error.message);
+    throw new Error('Lỗi khi lấy danh sách nhóm.');
+  }
+};
+
+const lockGroupService = async (groupId) => {
+  const group = await Group.findById(groupId);
+  if (!group) {
+      throw new Error('Group not found.');
+  }
+
+  group._destroy = new Date();
+  await group.save();
+  return group;
+};
+
+const unlockGroupService = async (groupId) => {
+  const group = await Group.findById(groupId);
+  if (!group) {
+      throw new Error('Group not found.');
+  }
+
+  if (!group._destroy) {
+      throw new Error('Group is not locked.');
+  }
+
+  group._destroy = null; // Set _destroy to null to unlock the group
+  await group.save();
+
+  return group;
+};
 
 
 export const groupService = {
@@ -1506,4 +1585,7 @@ export const groupService = {
   leaveGroupService,
   getFriendsNotInGroupService,
   inviteFriendsToGroupService,
+  getAllGroupsService,
+  lockGroupService,
+  unlockGroupService
 }
