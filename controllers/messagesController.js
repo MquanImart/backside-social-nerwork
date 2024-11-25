@@ -1,4 +1,5 @@
 import { messageService } from '../services/messageService.js'
+import { cloudStorageService } from '../services/cloudStorageService.js'
 
 const getAllMessagesByUserID = async (req, res) => {
     const userID = req.params.UserId
@@ -77,7 +78,64 @@ const getAllMessagesByUserID = async (req, res) => {
       res.status(500).json({ error: 'Failed to send message' });
     }
   };
+  const sendMessagePhoto = async (req, res) => {
+    const conversationID = req.params.ConversationID;
+    const content = req.body.content ? JSON.parse(req.body.content) : null;
+    const imageFile = req.files?.image ? req.files.image[0] : null
+    const videoFile = req.files?.video
+      ? req.files.video[0]
+      : null 
 
+    if (!content) {
+      return res.status(400).send({ message: 'No content provided' });
+    }  
+    try {
+      let imageUrl = ''
+      let videoUrl = ''
+
+      if (imageFile) {
+        imageUrl = await cloudStorageService.uploadImageConversationsToStorage(
+          imageFile,
+          conversationID,
+          'image'
+        )
+      }
+      if (videoFile) {
+        videoUrl = await cloudStorageService.uploadImageConversationsToStorage(
+          videoFile,
+          conversationID,
+          'video'
+        )
+      }
+      let result = null;
+      if (imageUrl !== ''){
+        result = await messageService.sendMessage(conversationID, { 
+          message: {
+            type: 'image',
+            data: imageUrl,
+          },
+          userId: content.userId,
+          sendDate: content.sendDate,
+          viewDate: null
+       },)
+      }
+      else if (videoUrl !== ''){
+        result = await messageService.sendMessage(conversationID, { 
+          message: {
+            type: 'video',
+            data: videoUrl,
+          },
+          userId: content.userId,
+          sendDate: content.sendDate,
+          viewDate: null
+       },)
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Lỗi khi gửi tin nhắn:', error);
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  };
   const createNewMessages = async (req, res) => {
     const { userID, friendID, message} = req.body;
     
@@ -125,5 +183,6 @@ export const messageController = {
     sendMessage,
     createNewMessages,
     getAllFriendsWithoutChat,
-    getUnreadMessage
+    getUnreadMessage,
+    sendMessagePhoto
 }
