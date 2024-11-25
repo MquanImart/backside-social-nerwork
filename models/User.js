@@ -45,6 +45,10 @@ const userSchema = new mongoose.Schema({
   aboutMe: String,
   hobbies: [String],
   listArticle: [String],
+  setting: {
+    profileVisibility: { type: String, enum: ['public', 'friends', 'private'], default: 'public' }, 
+    allowMessagesFromStrangers: { type: Boolean, default: true }
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
   _destroy: Date

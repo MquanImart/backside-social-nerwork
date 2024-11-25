@@ -371,6 +371,63 @@ const updateUser = async (userId, newData, avtUrl, backGroundUrl) => {
   }
 };
 
+const updateSetting = async (userId, newSetting) => {
+  try {
+    // Kiểm tra nếu `userId` không phải là ObjectId hợp lệ
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return {
+        success: false,
+        message: 'Id không hợp lệ'
+      }
+    }
+
+    // Kiểm tra xem `newSetting` có chứa các trường hợp lệ
+    const validFields = ["profileVisibility", "allowMessagesFromStrangers"];
+    const fieldsToUpdate = Object.keys(newSetting).filter((key) =>
+      validFields.includes(key)
+    );
+
+    if (fieldsToUpdate.length === 0) {
+      return {
+        success: false,
+        message: 'Không có trường nào cần cập nhật'
+      }
+    }
+
+    // Xây dựng object cập nhật
+    const updateData = {
+      updatedAt: new Date(), // Cập nhật lại `updatedAt`
+    };
+    fieldsToUpdate.forEach((field) => {
+      updateData[`setting.${field}`] = newSetting[field];
+    });
+
+    // Thực hiện cập nhật trong MongoDB
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true, runValidators: true } // Trả về bản ghi đã cập nhật và kiểm tra hợp lệ
+    );
+
+    if (!updatedUser) {
+      return {
+        success: false,
+        message: 'Không tìm thấy người dùng'
+      }
+    }
+
+    return {
+      success: true,
+      data: updatedUser,
+      message: "Cập nhật thành công"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Cập nhật thấy bại'
+    }
+  }
+};
 export const userService = {
   getUserByIdService,
   getArticlesByCollectionIdService,
@@ -381,4 +438,5 @@ export const userService = {
   updateUser,
   getUserHobbies,
   getFriendUser,
+  updateSetting,
 }

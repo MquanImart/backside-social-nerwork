@@ -26,5 +26,6 @@ Router.get('/:userId/follower-data', userController.getUserDataFollower)
 Router.get('/hobbies/:userId', userController.getUserHobbies)
 Router.get('/friends/:userId', userController.getFriendUser)
 
+Router.patch('/setting/:userId', userController.updateSetting)
 
 export const userRoute = Router

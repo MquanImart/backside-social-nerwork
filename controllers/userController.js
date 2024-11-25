@@ -175,6 +175,25 @@ const getUserHobbies = async (req, res) => {
   }
 }
 
+const updateSetting = async (req, res) => {
+  const { userId } = req.params;
+  const newSetting = req.body; 
+  try {
+    const result = await userService.updateSetting(userId, newSetting)
+    if (result.success){
+      return res.status(200).json(result);
+    } else{
+      return res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('Lỗi:', error)
+    return res.status(500).json({
+      success: false,
+      message: error
+    })
+  }
+}
+
 export const userController = {
   getUserById,
   getArticlesByCollectionId,
@@ -185,4 +204,5 @@ export const userController = {
   updateUser,
   getUserHobbies,
   getFriendUser,
+  updateSetting,
 }

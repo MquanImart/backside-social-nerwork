@@ -61,7 +61,7 @@ const getMessageWithFriend = async (userID, friendID) => {
         conversation._user.includes(userID) && conversation._user.includes(friendID)
     );
     if (messages.length === 0) {
-      return [];
+      return null;
     }
 
     const resultData = await Promise.all(messages.map(async (message) => {
