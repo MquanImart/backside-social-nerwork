@@ -40,23 +40,23 @@ const getSuggestAddFriend= async (userId, page) => {
         const userObjectId = new mongoose.Types.ObjectId(userId);
         const user = await User.findById(userObjectId);
         let allFriendsIds = user.friends.map(friend => friend.idUser); 
-        allFriendsIds = allFriendsIds.concat(user._id.toString());
 
         const sentFriendRequests = await AddFriends.find({
           receiverId: userId,  // Điều kiện người nhận
           status: 'pending'    // Điều kiện trạng thái là 'pending'
         }).select('senderId');
         
-
         const receivedFriendRequests = await AddFriends.find({
           senderId: userId,
           status: 'pending' 
         }).select('receiverId');
+        
+        
 
         const senders = sentFriendRequests.map(friend => friend.senderId.toString());
         const receivers = receivedFriendRequests.map(friend => friend.receiverId.toString());
 
-        const allRelatedIds = [...senders, ...receivers, ...allFriendsIds];
+        const allRelatedIds = [...senders, ...receivers, ...allFriendsIds, user._id];
 
         const usersNotInFriends = await User.find({
           _id: { $nin: allRelatedIds }
@@ -65,7 +65,8 @@ const getSuggestAddFriend= async (userId, page) => {
         .limit(10);
 
         const resultData = await Promise.all(usersNotInFriends.map(async (user) => {
-          const avt = await MyPhoto.findById(usersNotInFriends.avt[user.avt.length - 1]);
+          const avt = await MyPhoto.findById(user.avt[user.avt.length - 1]);
+          
             return {        
                 idUser: user._id,       
                 avt: avt,
@@ -120,9 +121,10 @@ const getAllFriendRequest = async (userId, page) => {
       })
       .skip((page - 1) * 10)
       .limit(10);
+      
       const result = await Promise.all(friendRequest.map(async (friendreq) => {
         const friend = await User.findById(friendreq.senderId);
-        const avt = await MyPhoto.findById(friend.avt[user.avt.length - 1]);
+        const avt = await MyPhoto.findById(friend.avt[friend.avt.length - 1]);
         return {
             _id: friendreq._id,        
             idUser: friendreq.senderId,       

@@ -11,11 +11,6 @@ const articleSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  idHandler: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
-  },
   handleDate: Date,
   reports: [
     {

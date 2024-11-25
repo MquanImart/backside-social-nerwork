@@ -21,7 +21,7 @@ const getAllFriendByIdUser = async (req, res) => {
 
     } catch (error) {
       console.error('Lỗi khi lấy danh sách bạn bè:', error);
-      res.status(500).json({ error: 'Failed to create conversation' });
+      res.status(500).json({ error: 'Không thể lấy danh sách đề xuất' });
     }
   };
   const addFriend = async (req, res) => {
