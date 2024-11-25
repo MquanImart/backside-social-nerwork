@@ -3,6 +3,7 @@ import { groupService } from '../services/groupServices.js'
 import Group from '../models/Group.js'
 import { cloudStorageService } from '../services/cloudStorageService.js'
 import MyPhoto from '../models/MyPhoto.js'
+import { badWords } from '@vnphu/vn-badwords';
 
 const getUserGroups = async (req, res) => {
   try {
@@ -152,6 +153,12 @@ const createGroupArticle = async (req, res) => {
     // Kiểm tra các thông tin bắt buộc
     if (!content || !scope || !userId || !groupId) {
       return res.status(400).json({ message: 'Thiếu thông tin bài viết hoặc người dùng.' });
+    }
+
+    if (badWords(content, { validate: true })) {
+      return res.status(400).json({
+        message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
+      });
     }
 
     // Xử lý upload ảnh và video, lưu vào `MyPhoto`
@@ -883,6 +890,54 @@ const inviteFriendsToGroup = async (req, res) => {
   }
 }
 
+const getAllGroups = async (req, res) => {
+  try {
+    const groups = await groupService.getAllGroupsService(); // Gọi service để lấy dữ liệu
+    res.status(200).json({
+      message: `Lấy thành công ${groups.length} nhóm.`,
+      groups,
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách nhóm:', error.message);
+    res.status(500).json({
+      message: 'Lỗi server',
+      error: error.message,
+    });
+  }
+};
+const lockGroup = async (req, res) => {
+  const { groupId } = req.params;
+
+  try {
+      const group = await groupService.lockGroupService(groupId);
+      return res.status(200).json({
+          message: 'Group successfully locked.',
+          groupId: group._id,
+      });
+  } catch (error) {
+      console.error('Error locking the group:', error.message);
+      return res.status(500).json({
+          message: 'Error locking the group.',
+          error: error.message,
+      });
+  }
+};
+const unlockGroup = async (req, res, next) => {
+  const { groupId } = req.params;
+
+  try {
+      const group = await groupService.unlockGroupService(groupId);
+      res.status(200).json({
+          message: 'Group successfully unlocked.',
+          group,
+      });
+  } catch (error) {
+      next(error); // Pass error to global error handler
+  }
+};
+
+
+
 export const groupController = {
   getUserGroups,
   getAllGroupArticles,
@@ -917,5 +972,7 @@ export const groupController = {
   leaveGroup,
   getFriendsNotInGroup,
   inviteFriendsToGroup,
-
+  getAllGroups,
+  lockGroup,
+  unlockGroup
 }

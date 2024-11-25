@@ -8,6 +8,7 @@ const upload = multer({ storage })
 
 const Router = express.Router()
 
+Router.get('/all', articleController.getAllArticlesWithCommentsSystemWide);
 //API lấy tất cả thông tin của một bài viết
 Router.get('/:postId', articleController.getArticleById)
 //  API tạo bài viết ở new-feed và ở phần profile
@@ -42,5 +43,9 @@ Router.post(
 Router.post('/:postId/share', articleController.shareArticle)
 // API lấy tất cả bài viết của người dùng đó tạo
 Router.get('/user/:userId/articles', articleController.getAllArticlesOfUser)
+
+Router.post('/approve/:reportId', articleController.approveReport);
+Router.post('/reject/:reportId', articleController.rejectReport);
+
 
 export const articleRoute = Router
