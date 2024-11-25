@@ -198,7 +198,7 @@ const likeArticle = async (req, res) => {
 
     // Chỉ tạo thông báo nếu userId khác với createdBy._id
     if (action === 'like' && userId !== article.createdBy._id.toString()) {
-
+      const postLink = `http://localhost:5173/new-feeds/${postId}`;
       emitEvent('like_article_notification', {
         senderId: {
           _id: userId,
@@ -209,7 +209,8 @@ const likeArticle = async (req, res) => {
         receiverId: article.createdBy._id,
         message: `${displayName} đã thích bài viết của bạn`,
         status: 'unread',
-        createdAt: new Date()
+        createdAt: new Date(),
+        link: postLink
       });
 
       const newNotification = new Notification({
@@ -217,7 +218,8 @@ const likeArticle = async (req, res) => {
         receiverId: article.createdBy._id,
         message: `${displayName} đã thích bài viết của bạn.`,
         status: 'unread',
-        createdAt: new Date()
+        createdAt: new Date(),
+        link: postLink
       });
 
       await newNotification.save();
@@ -264,7 +266,7 @@ const shareArticle = async (req, res) => {
     // Lấy displayName và avatar của người dùng
     const displayName = user.displayName || 'Người dùng';
     const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
-
+    const originalPostLink = `http://localhost:5173/new-feeds/${postId}`; 
     // Chỉ phát thông báo nếu người chia sẻ không phải là người tạo bài viết
     if (userId !== article.createdBy._id.toString()) {
       emitEvent('share_notification', {
@@ -277,7 +279,8 @@ const shareArticle = async (req, res) => {
         receiverId: article.createdBy._id,
         message: `${displayName} đã chia sẻ bài viết của bạn`,
         status: 'unread',
-        createdAt: new Date()
+        createdAt: new Date(),
+        originalPostLink
       });
     }
 

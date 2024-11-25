@@ -183,10 +183,6 @@ const registerService = async ({
 
 
 
-
-
-
-
 // Service xử lý logic đăng nhập
 const loginService = async (email, password) => {
   try {
@@ -194,7 +190,10 @@ const loginService = async (email, password) => {
     if (!user) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
-
+    if (user.status === 'locked') {
+      return { success: false, message: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' }
+    }
+    
     const isMatch = await bcrypt.compare(password, user.account.password)
     if (!isMatch) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }

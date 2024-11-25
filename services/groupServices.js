@@ -13,7 +13,8 @@ const getUserGroupsService = async (userId) => {
   }
 
   const userGroups = await Group.find({
-    'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } }
+    'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } },
+    _destroy: { $exists: false }
   })
     .populate({
       path: 'avt', // Lấy avatar của nhóm
@@ -208,41 +209,43 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
     !mongoose.Types.ObjectId.isValid(adminId) ||
     !mongoose.Types.ObjectId.isValid(currentUserId)
   ) {
-    throw new Error('ID không hợp lệ.')
+    throw new Error('ID không hợp lệ.');
   }
 
-  const group = await Group.findById(groupId)
+  const group = await Group.findById(groupId);
   if (!group) {
-    throw new Error('Nhóm không tồn tại.')
+    throw new Error('Nhóm không tồn tại.');
   }
 
   if (group.idAdmin.toString() !== currentUserId.toString()) {
-    throw new Error('Bạn không có quyền thêm quản trị viên cho nhóm này.')
+    throw new Error('Bạn không có quyền thêm quản trị viên cho nhóm này.');
   }
 
   const isMember = group.members.listUsers.some(
     (member) =>
       member.idUser.toString() === adminId && member.state === 'accepted'
-  )
+  );
 
   if (!isMember) {
-    throw new Error('Người dùng này không phải là thành viên hợp lệ của nhóm.')
+    throw new Error('Người dùng này không phải là thành viên hợp lệ của nhóm.');
   }
 
   const isAlreadyAdmin = group.Administrators.some(
     (admin) => admin.idUser.toString() === adminId
-  )
+  );
   if (isAlreadyAdmin) {
-    throw new Error('Người dùng này đã là quản trị viên của nhóm.')
+    throw new Error('Người dùng này đã là quản trị viên của nhóm.');
   }
 
   group.Administrators.push({
     idUser: adminId,
     state: 'pending',
     joinDate: new Date()
-  })
+  });
 
-  await group.save()
+  await group.save();
+
+  const personalManagementLink = `http://localhost:5173/group/${group._id}/personal-management`; // Tạo link tới trang quản lý cá nhân của nhóm
 
   // Thông báo socket khi người dùng được thêm làm quản trị viên
   emitEvent('invite_become_admin', {
@@ -250,14 +253,27 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
     receiverId: adminId, // Người nhận thông báo (quản trị viên mới)
     message: `Bạn đã được mời làm quản trị viên của nhóm ${group.groupName}.`,
     groupId: group._id,
-    createdAt: new Date()
-  })
+    createdAt: new Date(),
+    link: personalManagementLink // Thêm link vào sự kiện socket
+  });
+
+  const notification = new Notification({
+    senderId: currentUserId,
+    receiverId: adminId,
+    message: `Bạn đã được mời làm quản trị viên của nhóm ${group.groupName}.`,
+    status: 'unread',
+    createdAt: new Date(),
+    link: personalManagementLink // Thêm link vào thông báo
+  });
+
+  await notification.save();
 
   return {
     message: 'Quản trị viên đã được thêm thành công.',
     group
-  }
-}
+  };
+};
+
 
 const getProcessedArticlesService = async (groupId, page, limit) => {
   try {
@@ -620,13 +636,14 @@ const acceptInviteService = async (groupId, userId) => {
   group.members.count += 1
 
   await group.save()
-
+  const groupLink = `http://localhost:5173/group/${group._id}`; 
   const notification = new Notification({
     senderId: group.idAdmin,
     receiverId: userId,
     message: `Bạn đã trở thành thành viên của nhóm ${group.groupName}.`,
     status: 'unread',
-    createdAt: new Date()
+    createdAt: new Date(),
+    link: groupLink
   })
 
   await notification.save()
@@ -636,7 +653,8 @@ const acceptInviteService = async (groupId, userId) => {
     receiverId: userId,
     message: `Bạn đã trở thành thành viên của nhóm ${group.groupName}.`,
     groupId: group._id,
-    createdAt: new Date()
+    createdAt: new Date(),
+    link: groupLink
   })
 
   emitEvent('group_member_count_updated', {
@@ -1094,9 +1112,9 @@ const removeAdminRoleService = async (groupId, userId) => {
     group.Administrators = group.Administrators.filter(
       (admin) => admin.idUser.toString() !== userId
     )
-    await group.save() // Lưu nhóm sau khi cập nhật
+    await group.save()
 
-    return true // Xoá thành công
+    return true 
   } catch (error) {
     console.error('Lỗi khi xoá quản trị viên:', error.message)
     throw new Error('Lỗi khi xoá quản trị viên')
@@ -1111,13 +1129,11 @@ const sendJoinRequestService = async (groupId, userId) => {
     throw new Error('ID nhóm hoặc ID người dùng không hợp lệ.')
   }
 
-  // Tìm nhóm với ID groupId
   const group = await Group.findById(groupId)
   if (!group) {
     throw new Error('Nhóm không tồn tại.')
   }
 
-  // Kiểm tra xem người dùng đã có trong danh sách thành viên chưa
   const existingMember = group.members.listUsers.find(
     (member) => member.idUser.toString() === userId
   )
@@ -1130,14 +1146,12 @@ const sendJoinRequestService = async (groupId, userId) => {
     }
   }
 
-  // Thêm người dùng vào danh sách thành viên với trạng thái "pending"
   group.members.listUsers.push({
     idUser: userId,
     state: 'pending',
     joinDate: new Date()
   })
 
-  // Cập nhật lại thông tin nhóm
   const updatedGroup = await group.save()
 
   return updatedGroup
@@ -1151,7 +1165,6 @@ const revokeRequestService = async (groupId, userId) => {
     throw new Error('ID nhóm hoặc người dùng không hợp lệ.')
   }
 
-  // Tìm nhóm và xóa người dùng khỏi danh sách thành viên có trạng thái `pending`
   const updatedGroup = await Group.findByIdAndUpdate(
     groupId,
     {
@@ -1176,20 +1189,16 @@ const editGroupService = async ({
   hobbies,
   rule
 }) => {
-  // Tìm nhóm theo ID và kiểm tra tính hợp lệ
   const group = await Group.findById(groupId);
   if (!group) {
     throw new Error('Nhóm không tồn tại.');
   }
 
-  // Xóa ảnh cũ khỏi Google Cloud Storage và cập nhật `MyPhoto` nếu có ảnh mới
   if (avt) {
     if (group.avt) {
       const oldPhoto = await MyPhoto.findById(group.avt);
       if (oldPhoto) {
-        // Xóa ảnh cũ trên Google Cloud Storage
         await cloudStorageService.deleteImageFromStorage(oldPhoto.link);
-        // Đánh dấu `_destroy` trong `MyPhoto`
         await MyPhoto.findByIdAndUpdate(oldPhoto._id, { _destroy: new Date() });
       }
     }
@@ -1200,20 +1209,15 @@ const editGroupService = async ({
     if (group.backGround) {
       const oldBackgroundPhoto = await MyPhoto.findById(group.backGround);
       if (oldBackgroundPhoto) {
-        // Xóa ảnh cũ trên Google Cloud Storage
         await cloudStorageService.deleteImageFromStorage(oldBackgroundPhoto.link);
-        // Đánh dấu `_destroy` trong `MyPhoto`
         await MyPhoto.findByIdAndUpdate(oldBackgroundPhoto._id, { _destroy: new Date() });
       }
     }
     group.backGround = backGround;
   }
 
-  // Cập nhật các trường nếu có
   if (groupName) group.groupName = groupName;
   if (introduction) group.introduction = introduction;
-
-  // Kiểm tra `hobbies` và cập nhật hoặc xóa
   if (Array.isArray(hobbies)) {
     group.hobbies = hobbies.length === 0 ? [] : hobbies;
   }
@@ -1226,28 +1230,22 @@ const editGroupService = async ({
 };
 
 
-// Service xóa nhóm và các dữ liệu liên quan
 const deleteGroupService = async (groupId, userId) => {
-  // Tìm nhóm theo ID và kiểm tra tính hợp lệ
   const group = await Group.findById(groupId)
   if (!group) {
     throw new Error('Nhóm không tồn tại.')
   }
 
-  // Kiểm tra quyền của người dùng (chỉ cho phép chủ nhóm xóa nhóm)
   if (group.idAdmin.toString() !== userId) {
     throw new Error('Bạn không có quyền xóa nhóm này.')
   }
 
-  // Xóa tất cả các bài viết liên quan đến nhóm
   await Article.deleteMany({ groupID: groupId })
 
-  // Xóa danh sách quản trị viên và thành viên
-  group.members.listUsers = [] // Xóa tất cả thành viên trong nhóm
-  group.Administrators = [] // Xóa tất cả quản trị viên trong nhóm
+  group.members.listUsers = []
+  group.Administrators = [] 
 
-  // Đánh dấu thời gian xóa nhóm
-  group._destroy = new Date() // Đặt thời gian xóa nhóm để đánh dấu là đã xóa
+  group._destroy = new Date() 
 
   // Lưu nhóm sau khi cập nhật
   const deletedGroup = await group.save()
@@ -1264,13 +1262,11 @@ const leaveGroupService = async (groupId, userId) => {
     throw new Error('ID nhóm hoặc ID người dùng không hợp lệ.')
   }
 
-  // Tìm nhóm theo ID và kiểm tra tính tồn tại
   const group = await Group.findById(groupId)
   if (!group) {
     throw new Error('Nhóm không tồn tại.')
   }
 
-  // Kiểm tra xem người dùng có phải là thành viên của nhóm không
   const memberIndex = group.members.listUsers.findIndex(
     (member) =>
       member.idUser.toString() === userId && member.state === 'accepted'
@@ -1279,15 +1275,13 @@ const leaveGroupService = async (groupId, userId) => {
     throw new Error('Người dùng không phải là thành viên của nhóm.')
   }
 
-  // Tìm tất cả các bài viết của người dùng trong nhóm và cập nhật `_destroy`
   const userArticles = await Article.find({
     groupID: groupId,
     createdBy: userId,
-    state: 'processed', // Chỉ lấy những bài viết có trạng thái `accepted`
+    state: 'processed', 
     _destroy: { $exists: false }
   })
 
-  // Cập nhật `_destroy` cho các bài viết được tìm thấy
   await Article.updateMany(
     {
       groupID: groupId,
@@ -1298,11 +1292,9 @@ const leaveGroupService = async (groupId, userId) => {
     { _destroy: new Date() }
   )
 
-  // Cập nhật số lượng bài viết bị xóa vào chỉ số của nhóm
   const deletedArticleCount = userArticles.length
-  group.article.count -= deletedArticleCount // Giảm số lượng bài viết của nhóm tương ứng
+  group.article.count -= deletedArticleCount
 
-  // Cập nhật `listArticle` để loại bỏ tất cả các bài viết của người dùng đã bị xóa khỏi `listArticle`
   group.article.listArticle = group.article.listArticle.filter(
     (article) => article.createdBy.toString() !== userId
   )
@@ -1402,52 +1394,58 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
       !mongoose.Types.ObjectId.isValid(userId) ||
       !mongoose.Types.ObjectId.isValid(groupId)
     ) {
-      throw new Error('ID người dùng hoặc nhóm không hợp lệ')
+      throw new Error('ID người dùng hoặc nhóm không hợp lệ');
     }
+
     // Lấy thông tin nhóm
-    const group = await Group.findById(groupId)
+    const group = await Group.findById(groupId);
     if (!group) {
-      throw new Error('Nhóm không tồn tại')
+      throw new Error('Nhóm không tồn tại');
     }
 
     // Kiểm tra nếu người mời là thành viên của nhóm
     const isMember = group.members.listUsers.some(
       (member) =>
         member.idUser.toString() === userId && member.state === 'accepted'
-    )
+    );
 
     if (!isMember) {
       throw new Error(
         'Bạn phải là thành viên của nhóm để mời người khác tham gia'
-      )
+      );
     }
+
+    const exploreGroupLink = `http://localhost:5173/group/explore-groups`; // Tạo link tới trang khám phá nhóm
 
     // Gửi thông báo đến từng bạn bè
     for (const friendId of invitedFriends) {
       // Kiểm tra friendId có hợp lệ không
       if (!mongoose.Types.ObjectId.isValid(friendId)) {
-        console.warn(`ID người dùng không hợp lệ: ${friendId}`)
-        continue // Bỏ qua ID không hợp lệ
+        console.warn(`ID người dùng không hợp lệ: ${friendId}`);
+        continue; // Bỏ qua ID không hợp lệ
       }
 
       // Kiểm tra thông tin người nhận (friendId) có tồn tại không
-      const receiver = await User.findById(friendId).select('_id displayName')
+      const receiver = await User.findById(friendId).select('_id displayName');
       if (!receiver) {
-        console.warn(`Người dùng với ID ${friendId} không tồn tại.`)
-        continue // Bỏ qua nếu người dùng không tồn tại
+        console.warn(`Người dùng với ID ${friendId} không tồn tại.`);
+        continue; // Bỏ qua nếu người dùng không tồn tại
       }
 
       // Tạo thông báo cho bạn bè được mời
-      const notificationMessage = `Bạn đã được mời tham gia nhóm ${group.groupName}`
+      const notificationMessage = `Bạn đã được mời tham gia nhóm ${group.groupName}`;
       const notification = new Notification({
         senderId: userId,
         receiverId: receiver._id, // Đảm bảo receiverId được lấy từ thông tin người nhận
-        message: notificationMessage
-      })
-      await notification.save()
+        message: notificationMessage,
+        link: exploreGroupLink, // Thêm link tới thông báo
+        status: 'unread',
+        createdAt: new Date()
+      });
+      await notification.save();
 
       // Lấy thông tin người gửi để gửi thông báo real-time
-      const sender = await User.findById(userId).select('displayName avt')
+      const sender = await User.findById(userId).select('displayName avt');
 
       // Phát sự kiện real-time
       emitEvent('new_group_invite_notification', {
@@ -1459,16 +1457,18 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
         groupId,
         receiverId: receiver._id,
         message: `${sender.displayName} đã mời bạn tham gia nhóm ${group.groupName}`,
-        createdAt: new Date()
-      })
+        createdAt: new Date(),
+        link: exploreGroupLink // Thêm link vào sự kiện socket
+      });
     }
 
-    return invitedFriends
+    return invitedFriends;
   } catch (error) {
-    console.error('Lỗi khi gửi lời mời tham gia nhóm:', error)
-    throw new Error('Lỗi khi gửi lời mời tham gia nhóm.')
+    console.error('Lỗi khi gửi lời mời tham gia nhóm:', error);
+    throw new Error('Lỗi khi gửi lời mời tham gia nhóm.');
   }
-}
+};
+
 
 const getAllGroupsService = async () => {
   try {
