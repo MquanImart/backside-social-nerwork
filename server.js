@@ -17,9 +17,10 @@ const START_SERVER = () => {
 
   // Parse body và cookie
   const corsOptions = {
-    origin: 'http://localhost:5173', // Cho phép từ địa chỉ front-end (localhost:5173)
+    origin: ['http://localhost:5173', 'http://localhost:4000'], // Cho phép nhiều địa chỉ front-end
     credentials: true // Cho phép gửi cookie qua CORS nếu cần
-  }
+  };
+  
   app.use(bodyParser.json({ limit: '50mb' })) // Tăng giới hạn cho JSON
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true })) // Tăng giới hạn cho URL encoded
 

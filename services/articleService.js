@@ -878,6 +878,161 @@ const getAllArticlesByUserService = async (userId) => {
   return articlesWithCounts
 }
 
+const getAllArticlesWithCommentsSystemWideService = async (page = 1, limit = 10) => {
+  try {
+    const skip = (page - 1) * limit;
+
+    const articles = await Article.find({
+      _destroy: { $exists: false }, // Exclude deleted articles
+    })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt backGround',
+        populate: [
+          {
+            path: 'avt',
+            model: 'MyPhoto',
+            select: 'name link idAuthor type',
+          },
+          {
+            path: 'backGround',
+            model: 'MyPhoto',
+            select: 'name link idAuthor type',
+          },
+        ],
+      })
+      .populate({
+        path: 'interact.comment',
+        model: 'Comment',
+        populate: [
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: {
+              path: 'avt',
+              model: 'MyPhoto',
+              select: 'name link idAuthor type',
+            },
+          },
+          {
+            path: 'replyComment',
+            model: 'Comment',
+            populate: {
+              path: '_iduser',
+              select: 'firstName lastName displayName avt',
+              populate: {
+                path: 'avt',
+                model: 'MyPhoto',
+                select: 'name link idAuthor type',
+              },
+            },
+          },
+        ],
+      })
+      .populate({
+        path: 'groupID',
+        select: 'groupName avt backGround',
+      })
+      .populate({
+        path: 'listPhoto',
+        model: 'MyPhoto',
+        select: 'name link idAuthor type',
+      })
+      .sort({ createdAt: -1 }); // Most recent articles first
+
+    if (!articles || articles.length === 0) {
+      return { articles: [], hasMore: false };
+    }
+
+    const hasMore = articles.length === limit;
+
+    return { articles, hasMore };
+  } catch (error) {
+    console.error('Error fetching all articles system-wide:', error.message);
+    throw new Error('Error fetching articles.');
+  }
+};
+
+const approveReportService = async (reportId) => {
+  // Find the article with the specified report
+  const article = await Article.findOne({ "reports._id": reportId });
+  if (!article) {
+      throw new Error("Report not found.");
+  }
+
+  const report = article.reports.id(reportId);
+  if (report.status !== "pending") {
+      throw new Error("Report is already processed.");
+  }
+
+  // Update the report status
+  report.status = "processed";
+  report.handleDate = new Date();
+
+  // Find the user who created the article
+  const user = await User.findById(article.createdBy);
+  if (!user) {
+      throw new Error("User not found.");
+  }
+
+  // Increment the user's warning level
+  user.account.warningLevel += 1;
+
+  // Lock the user's account if the warning level reaches 3
+  if (user.account.warningLevel >= 3) {
+      user.status = "locked";
+  }
+
+  // Save the updated user
+  await user.save();
+
+  // Handle group warnings if the article is associated with a group
+  if (article.groupId) {
+      const group = await Group.findById(article.groupId);
+      if (group) {
+          // Increment the group's warning level
+          group.warningLevel += 1;
+
+          // Delete the group if its warning level reaches 3
+          if (group.warningLevel >= 3) {
+              await Group.findByIdAndUpdate(article.groupId, { _destroy: new Date() });
+          } else {
+              await group.save();
+          }
+      }
+  }
+
+  // Mark the article as deleted by updating the `_destroy` field
+  article._destroy = new Date();
+  await article.save();
+
+  return report;
+};
+
+
+
+const rejectReportService = async (reportId) => {
+  const article = await Article.findOne({ "reports._id": reportId });
+  if (!article) {
+      throw new Error("Report not found.");
+  }
+
+  const report = article.reports.id(reportId);
+  if (report.status !== "pending") {
+      throw new Error("Report is already processed.");
+  }
+
+  // Update the status to "rejected"
+  report.status = "rejected";
+  report.handleDate = new Date();
+  await article.save();
+
+  return report;
+};
+
+
 export const articleService = {
   getArticleByIdService,
   createArticleService,
@@ -892,5 +1047,8 @@ export const articleService = {
   likeCommentService,
   likeReplyCommentService,
   shareArticleService,
-  getAllArticlesByUserService
+  getAllArticlesByUserService,
+  getAllArticlesWithCommentsSystemWideService,
+  approveReportService,
+  rejectReportService
 }

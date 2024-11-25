@@ -8,6 +8,10 @@ const storage = multer.memoryStorage() // Hoặc dùng diskStorage nếu cần l
 const upload = multer({ storage })
 const Router = express.Router()
 
+
+Router.get('/all-groups', groupController.getAllGroups);
+
+
 Router.post(
   '/create',
   upload.fields([
@@ -119,5 +123,7 @@ Router.get(
 )
 // Gửi lời mời tham gia nhóm và gửi thông báo (group --> người dùng)
 Router.post('/invite-member', groupController.inviteFriendsToGroup)
+Router.post('/:groupId/lock', groupController.lockGroup);
+Router.post('/:groupId/unlock', groupController.unlockGroup);
 
 export const groupRoute = Router

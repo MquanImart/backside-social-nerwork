@@ -5,6 +5,7 @@ import { cloudStorageService } from '../services/cloudStorageService.js'
 import { emitEvent } from '../sockets/socket.js'
 import MyPhoto from '../models/MyPhoto.js'
 import Notification from '../models/Notification.js' // Import Notification model
+import { badWords } from '@vnphu/vn-badwords';
 
 const getArticleById = async (req, res) => {
   try {
@@ -27,55 +28,58 @@ const createArticle = async (req, res) => {
   try {
     const { content, scope, hashTag, userId } = req.body;
 
-    // Nếu có file thì upload, nếu không thì listPhoto sẽ là một mảng rỗng
-    let listPhoto = [];
-    if (req.files && req.files.length > 0) {
-      // Upload từng file trong `req.files` và tạo tài liệu MyPhoto cho mỗi ảnh hoặc video
-      listPhoto = await Promise.all(
-        req.files.map(async (file) => {
-          // Xác định loại tệp dựa vào đuôi file
-          const imageExtensions = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
-          const fileExtension = file.originalname.split(".").pop().toLowerCase();
-          const fileType = imageExtensions.includes(fileExtension) ? "img" : "video";
-
-          // Tạo tài liệu MyPhoto mới trước với link tạm thời
-          const newPhoto = new MyPhoto({
-            name: file.originalname,
-            idAuthor: userId,
-            type: fileType, // Loại sẽ là "img" hoặc "video" dựa trên phần mở rộng
-            link: "placeholder_link" // Đặt giá trị tạm thời cho link
-          });
-
-          const savedPhoto = await newPhoto.save();
-
-          // Sử dụng _id của MyPhoto làm tên file
-          const fileName = `user/${userId}/article/${savedPhoto._id}`;
-          const link = await cloudStorageService.uploadImageStorage(file, fileName);
-
-          // Cập nhật link trong tài liệu MyPhoto sau khi upload
-          await MyPhoto.findByIdAndUpdate(savedPhoto._id, { link: link });
-
-          return savedPhoto._id; // Lấy ObjectId của ảnh hoặc video đã lưu
-        })
-      );
+    if (badWords(content, { validate: true })) {
+      return res.status(400).json({
+        message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
+      });
     }
 
-    // Gọi hàm createArticleService để tạo bài viết mới với listPhoto là các ObjectId của MyPhoto hoặc mảng rỗng
+    // Nếu có file thì upload, nếu không thì listPhoto sẽ là một mảng rỗng
+    const listPhoto = req.files?.length > 0
+      ? await Promise.all(
+          req.files.map(async (file) => {
+            const imageExtensions = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
+            const fileExtension = file.originalname.split('.').pop().toLowerCase();
+            const fileType = imageExtensions.includes(fileExtension) ? "img" : "video";
+
+            const newPhoto = new MyPhoto({
+              name: file.originalname,
+              idAuthor: userId,
+              type: fileType,
+              link: "placeholder_link",
+            });
+
+            const savedPhoto = await newPhoto.save();
+            const fileName = `user/${userId}/article/${savedPhoto._id}`;
+            const link = await cloudStorageService.uploadImageStorage(file, fileName);
+
+            await MyPhoto.findByIdAndUpdate(savedPhoto._id, { link });
+
+            return savedPhoto._id; // Trả về ObjectId của ảnh/video
+          })
+        )
+      : [];
+
+    // Gọi dịch vụ tạo bài viết
     const savedArticle = await articleService.createArticleService({
       content,
-      listPhoto, // Sẽ là mảng chứa ObjectId ảnh hoặc video hoặc mảng rỗng nếu không có file
+      listPhoto,
       scope,
       hashTag,
-      userId
+      userId,
     });
 
+    // Phản hồi khi bài viết được tạo thành công
     res.status(201).json({
-      message: 'Post created successfully',
-      post: savedArticle
+      message: 'Tạo bài viết thành công',
+      post: savedArticle,
     });
   } catch (error) {
-    console.error('Error creating article:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Lỗi khi tạo bài viết:', error);
+    res.status(500).json({
+      message: 'Đã xảy ra lỗi trên máy chủ. Vui lòng thử lại sau.',
+      error: error.message,
+    });
   }
 };
 
@@ -436,6 +440,51 @@ const getAllArticlesOfUser = async (req, res) => {
   }
 }
 
+const getAllArticlesWithCommentsSystemWide = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1; // Defaults to page 1
+    const limit = parseInt(req.query.limit) || 10; // Defaults to 10 articles per page
+
+    // Service call to fetch all articles system-wide
+    const articles = await articleService.getAllArticlesWithCommentsSystemWideService(page, limit);
+
+    res.status(200).json(articles);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const approveReport = async (req, res) => {
+  try {
+      const { reportId } = req.params;
+      const report = await articleService.approveReportService(reportId);
+
+      res.status(200).json({
+          message: "Report approved successfully.",
+          report,
+      });
+  } catch (error) {
+      console.error("Error approving report:", error.message);
+      res.status(500).json({ message: error.message });
+  }
+};
+
+const rejectReport = async (req, res) => {
+  try {
+      const { reportId } = req.params;
+      const report = await articleService.rejectReportService(reportId);
+
+      res.status(200).json({
+          message: "Report rejected successfully.",
+          report,
+      });
+  } catch (error) {
+      console.error("Error rejecting report:", error.message);
+      res.status(500).json({ message: error.message });
+  }
+};
+
+
 export const articleController = {
   getArticleById,
   createArticle,
@@ -450,5 +499,8 @@ export const articleController = {
   likeComment,
   likeReplyComment,
   shareArticle,
-  getAllArticlesOfUser
+  getAllArticlesOfUser,
+  getAllArticlesWithCommentsSystemWide,
+  approveReport,
+  rejectReport
 }
