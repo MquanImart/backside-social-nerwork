@@ -177,40 +177,13 @@ const logoutAdmin = async (req, res) => {
   }
 }
 
-// Quên mật khẩu - gửi mã OTP qua email
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
-
   try {
-    const user = await User.findOne({ 'account.email': email });
-    if (!user) {
-      return res.status(404).json({ message: 'Email không tồn tại.' });
-    }
-
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    await PasswordResetToken.create({
-      userId: user._id,
-      otpCode,
-      expiresAt,
+    const result = await authService.initiatePasswordReset(email);
+    return res.status(result.success ? 200 : result.status).json({
+      message: result.message,
     });
-
-    const message = `
-      <h2>Mã OTP đặt lại mật khẩu</h2>
-      <p>Mã OTP của bạn là:</p>
-      <h3>${otpCode}</h3>
-      <p>Mã này sẽ hết hạn sau 5 phút.</p>
-    `;
-
-    await transporter.sendMail({
-      from: env.EMAIL_USER,
-      to: user.account.email,
-      subject: 'OTP đặt lại mật khẩu',
-      html: message,
-    });
-
-    res.status(200).json({ message: 'Mã OTP đã được gửi đến email của bạn.' });
   } catch (error) {
     console.error('Lỗi trong forgotPassword:', error);
     res.status(500).json({ message: 'Có lỗi xảy ra, vui lòng thử lại sau.' });
@@ -219,24 +192,11 @@ const forgotPassword = async (req, res) => {
 
 const verifyOtp = async (req, res) => {
   const { email, otpCode } = req.body;
-
   try {
-    const user = await User.findOne({ 'account.email': email });
-    if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại.' });
-    }
-
-    const tokenEntry = await PasswordResetToken.findOne({
-      userId: user._id,
-      otpCode,
-      expiresAt: { $gt: new Date() },
+    const result = await authService.verifyOtpCode(email, otpCode);
+    return res.status(result.success ? 200 : result.status).json({
+      message: result.message,
     });
-
-    if (!tokenEntry) {
-      return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
-    }
-
-    res.status(200).json({ message: 'OTP verified successfully.' });
   } catch (error) {
     console.error('Lỗi trong verifyOtp:', error);
     res.status(500).json({ message: 'Có lỗi xảy ra, vui lòng thử lại sau.' });
@@ -245,30 +205,11 @@ const verifyOtp = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   const { email, otpCode, newPassword } = req.body;
-
   try {
-    const user = await User.findOne({ 'account.email': email });
-    if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại.' });
-    }
-
-    const tokenEntry = await PasswordResetToken.findOne({
-      userId: user._id,
-      otpCode,
-      expiresAt: { $gt: new Date() },
+    const result = await authService.resetUserPassword(email, otpCode, newPassword);
+    return res.status(result.success ? 200 : result.status).json({
+      message: result.message,
     });
-
-    if (!tokenEntry) {
-      return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    user.account.password = await bcrypt.hash(newPassword, salt);
-    await user.save();
-    
-    await PasswordResetToken.deleteOne({ _id: tokenEntry._id });
-
-    res.status(200).json({ message: 'Đặt lại mật khẩu thành công.' });
   } catch (error) {
     console.error('Lỗi trong resetPassword:', error);
     res.status(500).json({ message: 'Có lỗi xảy ra, vui lòng thử lại sau.' });

@@ -1180,54 +1180,77 @@ const revokeRequestService = async (groupId, userId) => {
   return updatedGroup
 }
 
-const editGroupService = async ({
-  groupId,
-  groupName,
-  introduction,
-  avt,
-  backGround,
-  hobbies,
-  rule
-}) => {
+const editGroupService = async (groupId, userId, groupName, introduction, hobbies, rule, files) => {
   const group = await Group.findById(groupId);
   if (!group) {
     throw new Error('Nhóm không tồn tại.');
   }
 
-  if (avt) {
-    if (group.avt) {
-      const oldPhoto = await MyPhoto.findById(group.avt);
-      if (oldPhoto) {
-        await cloudStorageService.deleteImageFromStorage(oldPhoto.link);
-        await MyPhoto.findByIdAndUpdate(oldPhoto._id, { _destroy: new Date() });
-      }
+  if (group.idAdmin.toString() !== userId) {
+    throw new Error('Bạn không có quyền chỉnh sửa nhóm này.');
+  }
+
+  const hobbiesArray = Array.isArray(hobbies)
+    ? hobbies
+    : hobbies
+    ? hobbies.split(',').map((hobby) => hobby.trim())
+    : [];
+
+  // Xử lý ảnh đại diện
+  if (files?.avt) {
+    const oldAvt = await MyPhoto.findById(group.avt);
+    if (oldAvt) {
+      await MyPhoto.findByIdAndUpdate(oldAvt._id, { _destroy: new Date() });
+      await cloudStorageService.deleteImageFromStorage(oldAvt.link);
     }
-    group.avt = avt;
-  }
 
-  if (backGround) {
-    if (group.backGround) {
-      const oldBackgroundPhoto = await MyPhoto.findById(group.backGround);
-      if (oldBackgroundPhoto) {
-        await cloudStorageService.deleteImageFromStorage(oldBackgroundPhoto.link);
-        await MyPhoto.findByIdAndUpdate(oldBackgroundPhoto._id, { _destroy: new Date() });
-      }
+    const avtPhoto = await MyPhoto.create({
+      name: files.avt[0].originalname,
+      idAuthor: userId,
+      type: 'img',
+      link: 'placeholder-url',
+    });
+    const avtFileName = `group/${groupId}/avt/${avtPhoto._id}`;
+    const avtUrl = await cloudStorageService.uploadImageStorage(files.avt[0], avtFileName);
+
+    if (avtUrl) {
+      await MyPhoto.findByIdAndUpdate(avtPhoto._id, { link: avtUrl });
+      group.avt = avtPhoto._id;
     }
-    group.backGround = backGround;
   }
 
-  if (groupName) group.groupName = groupName;
-  if (introduction) group.introduction = introduction;
-  if (Array.isArray(hobbies)) {
-    group.hobbies = hobbies.length === 0 ? [] : hobbies;
+  // Xử lý ảnh nền
+  if (files?.backGround) {
+    const oldBackground = await MyPhoto.findById(group.backGround);
+    if (oldBackground) {
+      await MyPhoto.findByIdAndUpdate(oldBackground._id, { _destroy: new Date() });
+      await cloudStorageService.deleteImageFromStorage(oldBackground.link);
+    }
+
+    const backGroundPhoto = await MyPhoto.create({
+      name: files.backGround[0].originalname,
+      idAuthor: userId,
+      type: 'img',
+      link: 'placeholder-url',
+    });
+    const backGroundFileName = `group/${groupId}/background/${backGroundPhoto._id}`;
+    const backGroundUrl = await cloudStorageService.uploadImageStorage(files.backGround[0], backGroundFileName);
+
+    if (backGroundUrl) {
+      await MyPhoto.findByIdAndUpdate(backGroundPhoto._id, { link: backGroundUrl });
+      group.backGround = backGroundPhoto._id;
+    }
   }
 
-  if (rule) group.rule = rule;
+  // Cập nhật thông tin nhóm
+  group.groupName = groupName || group.groupName;
+  group.introduction = introduction || group.introduction;
+  group.hobbies = hobbiesArray.length > 0 ? hobbiesArray : group.hobbies;
+  group.rule = rule || group.rule;
 
-  // Lưu lại nhóm sau khi cập nhật
-  const updatedGroup = await group.save();
-  return updatedGroup;
+  return await group.save();
 };
+
 
 
 const deleteGroupService = async (groupId, userId) => {

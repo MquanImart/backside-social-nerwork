@@ -36,7 +36,6 @@ const getUserByIdService = async (userId) => {
   };
 };
 
-
 const getFriendUser = async (userId) => {
 
   const user = await User.findById(userId).select('-_destroy -__v') // Chọn không trả về các trường không cần thiết

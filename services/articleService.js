@@ -475,34 +475,7 @@ const addReplyToCommentService = async ({
   }
 };
 
-// socket thông báo rồi(chưa format lại thông báo) + chưa socket số like
-const likeArticleService = async (postId, userId) => {
-  const article = await Article.findById(postId)
-  if (!article) {
-    throw new Error('Bài viết không tồn tại')
-  }
 
-  // Kiểm tra xem người dùng đã like chưa
-  const likedIndex = article.interact.emoticons.findIndex(
-    (emoticon) =>
-      emoticon._iduser.toString() === userId &&
-      emoticon.typeEmoticons === 'like'
-  )
-
-  if (likedIndex > -1) {
-    article.interact.emoticons.splice(likedIndex, 1)
-    await article.save()
-    return { message: 'Đã hủy thích bài viết', article }
-  } else {
-    article.interact.emoticons.push({
-      _iduser: userId,
-      typeEmoticons: 'like',
-      createdAt: new Date()
-    })
-    await article.save()
-    return { message: 'Đã thích bài viết', article }
-  }
-}
 // socket thông báo rồi(chưa format lại thông báo)
 const reportArticleService = async (postId, userId, reason) => {
   try {
@@ -1063,6 +1036,94 @@ const rejectReportService = async (reportId) => {
   await article.save();
 
   return report;
+};
+
+const likeArticleService = async (postId, userId) => {
+  try {
+    const article = await Article.findById(postId).populate('createdBy');
+    if (!article) {
+      throw new Error('Bài viết không tồn tại');
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('Người dùng không tồn tại');
+    }
+
+    const likedIndex = article.interact.emoticons.findIndex(
+      (emoticon) =>
+        emoticon._iduser?.toString() === userId &&
+        emoticon.typeEmoticons === 'like'
+    );
+
+    let action = '';
+
+    if (likedIndex > -1) {
+      // Bỏ thích
+      article.interact.emoticons.splice(likedIndex, 1);
+      article.totalLikes = Math.max(article.totalLikes - 1, 0);
+      action = 'unlike';
+    } else {
+      // Thích bài viết
+      article.interact.emoticons.push({
+        _iduser: userId,
+        typeEmoticons: 'like',
+        createdAt: new Date(),
+      });
+      article.totalLikes += 1;
+      action = 'like';
+    }
+
+    await article.save();
+
+    emitEvent('update_article_likes', {
+      postId,
+      totalLikes: article.totalLikes,
+      action: action,
+      userId: userId,
+    });
+
+    // Tạo thông báo nếu cần
+    if (action === 'like' && userId !== article.createdBy._id.toString()) {
+      const displayName = user.displayName || 'Người dùng';
+      const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
+      const postLink = `http://localhost:5173/new-feeds/${postId}`;
+
+      emitEvent('like_article_notification', {
+        senderId: {
+          _id: userId,
+          avt: avt ? [avt] : [''],
+          displayName: displayName,
+        },
+        postId,
+        receiverId: article.createdBy._id,
+        message: `${displayName} đã thích bài viết của bạn`,
+        status: 'unread',
+        createdAt: new Date(),
+        link: postLink,
+      });
+
+      const newNotification = new Notification({
+        senderId: userId,
+        receiverId: article.createdBy._id,
+        message: `${displayName} đã thích bài viết của bạn.`,
+        status: 'unread',
+        createdAt: new Date(),
+        link: postLink,
+      });
+
+      await newNotification.save();
+    }
+
+    return {
+      action,
+      totalLikes: article.totalLikes,
+      article,
+    };
+  } catch (error) {
+    console.error(`Lỗi trong quá trình xử lý like: ${error.message}`);
+    throw new Error(error.message);
+  }
 };
 
 
