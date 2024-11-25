@@ -63,6 +63,35 @@ const uploadImageUserToStorage = async (file, userId, folderType) => {
   })
 }
 
+const uploadImageConversationsToStorage = async (file, conversationId, folderType) => {
+  if (!file) throw new Error('No image file provided')
+
+  // Tạo đường dẫn lưu trữ file trong folder theo userId và folderType (avatar hoặc background)
+  const fileName = `conversations/${conversationId}/${folderType}/${Date.now()}_${
+    file.originalname
+  }`
+  const fileUpload = bucket.file(fileName)
+
+
+  return new Promise((resolve, reject) => {
+    const blobStream = fileUpload.createWriteStream({
+      metadata: { contentType: file.mimetype }
+    })
+
+    blobStream.on('error', (error) => {
+      console.error('Error uploading to Cloud Storage:', error)
+      reject(`Error uploading to Cloud Storage: ${error}`)
+    })
+
+    blobStream.on('finish', () => {
+      const fileUrl = `https://storage.googleapis.com/${bucket.name}/${fileUpload.name}`
+      resolve(fileUrl)
+    })
+
+    blobStream.end(file.buffer)
+  })
+}
+
 const uploadImageStorage = async (file, fileName) => {
   if (!file || !file.buffer) {
     throw new Error('No image file or file buffer provided');
@@ -106,5 +135,6 @@ export const cloudStorageService = {
   uploadImageToStorage,
   uploadImageUserToStorage,
   uploadImageStorage,
-  deleteImageFromStorage
+  deleteImageFromStorage,
+  uploadImageConversationsToStorage,
 }

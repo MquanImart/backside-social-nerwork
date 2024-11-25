@@ -132,7 +132,7 @@ const sendMessage = async (conversationID, content) => {
 
     if (!conversation) {
       throw new Error('Conversation not found');
-    }content
+    }
     // Tìm _user đầu tiên không có trong danh sách messageUserIds 
     const friend = await conversation._user.find(userId => content.userId !== userId.toString());
 
