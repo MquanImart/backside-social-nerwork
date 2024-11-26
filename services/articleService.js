@@ -502,15 +502,32 @@ const reportArticleService = async (postId, userId, reason) => {
 
     await article.save();
     const postLink = `http://localhost:5173/new-feeds/${postId}`;
-    // Kiểm tra nếu người báo cáo khác với người tạo bài viết, thì mới gửi thông báo
+
+    const user = await User.findById(userId).populate({
+      path: 'avt',
+      model: 'MyPhoto',
+      select: '_id link'
+    });
+
+    if (!user) throw new Error('Người dùng không tồn tại.');
+
+    const { _id: avtId, link: avtLink } = await getUserAvatarLink(user);
+
     if (article.createdBy._id.toString() !== userId.toString()) {
       emitEvent('article_reported', {
         senderId: {
           _id: userId,
+          avt: [
+            {
+              _id: avtId || '', 
+              link: avtLink || '' 
+            }
+          ],
           displayName: 'Người dùng đã báo cáo'
         },
         articleId: postId,
         reporter: userId,
+        status: 'unread',
         reason: reason,
         receiverId: article.createdBy._id,
         message: `Bài viết của bạn đã bị báo cáo với lý do: ${reason}`,
@@ -581,10 +598,9 @@ const editArticleService = async (postId, updatedContent, updatedScope) => {
       throw new Error('Bài viết không tồn tại')
     }
 
-    // Cập nhật nội dung và phạm vi bài viết
     article.content = updatedContent || article.content
     article.scope = updatedScope || article.scope
-    article.updatedAt = new Date() // Cập nhật thời gian sửa
+    article.updatedAt = new Date() 
 
     const updatedArticle = await article.save()
     return updatedArticle
@@ -607,7 +623,10 @@ const likeCommentService = async (commentId, userId) => {
     }
 
     const displayName = user.displayName || 'Người dùng';
-    const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
+    
+    // Lấy avatar từ MyPhoto nếu có
+    const avtLink = await getUserAvatarLink(user);
+    console.log('avtLink', avtLink);
 
     const likedIndex = comment.emoticons.findIndex(
       (emoticon) =>
@@ -637,6 +656,7 @@ const likeCommentService = async (commentId, userId) => {
     }
 
     const postLink = `http://localhost:5173/new-feeds/${article._id}`;
+    
     // Chỉ gửi thông báo nếu người thích bình luận khác với người đã tạo bình luận
     if (action === 'like' && userId.toString() !== comment._iduser._id.toString()) {
       const notification = new Notification({
@@ -645,14 +665,14 @@ const likeCommentService = async (commentId, userId) => {
         message: `${displayName} đã thích bình luận của bạn`,
         status: 'unread',
         createdAt: new Date(),
-        link: postLink 
+        link: postLink
       });
 
       await notification.save();
       emitEvent('like_comment_notification', {
         senderId: {
           _id: userId,
-          avt: avt ? [avt] : [''],
+          avt: avtLink ? [{ _id: avtLink._id, link: avtLink.link }] : [], // Truyền đúng định dạng avatar
           displayName: displayName
         },
         commentId,
@@ -730,12 +750,16 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
 
     // Gửi thông báo nếu người thích khác với người tạo phản hồi
     if (action === 'like' && userId.toString() !== reply._iduser._id.toString()) {
+      // Lấy avatar từ MyPhoto nếu có
+      const avtLink = await getUserAvatarLink(user);
+      console.log('avtLink', avtLink); // Debug kiểm tra avatar
+
       // Phát socket
       emitEvent('like_reply_notification', {
         senderId: {
           _id: userId,
           displayName: displayName,
-          avt: user.avt ? [user.avt] : ['']
+          avt: avtLink ? [{ _id: avtLink._id, link: avtLink.link }] : [] // Đảm bảo định dạng avt
         },
         commentId,
         replyId,
@@ -772,8 +796,6 @@ const likeReplyCommentService = async (commentId, replyId, userId) => {
     throw new Error(`Lỗi khi xử lý like reply: ${error.message}`);
   }
 };
-
-
 // Service - shareArticleService
 const shareArticleService = async ({ postId, content, scope, userId }) => {
   try {
@@ -795,6 +817,7 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
     if (!article) {
       throw new Error('Bài viết không tồn tại');
     }
+
     // Tạo bài viết mới với các thông tin yêu cầu
     const newArticle = new Article({
       content,
@@ -811,14 +834,55 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
 
     const savedArticle = await newArticle.save();
 
-    // Trả về bài viết với định dạng mong muốn, bao gồm toàn bộ thông tin của `avt` dưới dạng mảng
+    // Lấy avatar của người chia sẻ
+    const avtLink = await getUserAvatarLink(user);
+
+    // Gửi sự kiện chia sẻ bài viết và tạo thông báo nếu cần
+    if (userId !== article.createdBy._id.toString()) {
+      const displayName = user.displayName || `${user.firstName} ${user.lastName}`;
+      const originalPostLink = `http://localhost:5173/new-feeds/${postId}`;
+
+      // Phát sự kiện chia sẻ bài viết
+      emitEvent('share_article_notification', {
+        senderId: {
+          _id: userId,
+          avt: [
+            {
+              _id: avtLink._id || '', // Đảm bảo rằng _id của avatar được truyền chính xác
+              link: avtLink.link || '' // Truyền link avatar
+            }
+          ],
+          displayName
+        },
+        postId,
+        receiverId: article.createdBy._id,
+        message: `${displayName} đã chia sẻ bài viết của bạn`,
+        status: 'unread',
+        createdAt: new Date(),
+        originalPostLink
+      });
+
+      // Lưu thông báo vào database
+      const newNotification = new Notification({
+        senderId: userId,
+        receiverId: article.createdBy._id,
+        message: `${displayName} đã chia sẻ bài viết của bạn.`,
+        status: 'unread',
+        createdAt: new Date(),
+        link: originalPostLink,
+      });
+
+      await newNotification.save();
+    }
+
+    // Trả về bài viết đã chia sẻ với thông tin người tạo bài viết và avatar
     return {
       ...savedArticle.toObject(),
       createdBy: {
         _id: user._id,
         firstName: user.firstName,
         lastName: user.lastName,
-        avt: Array.isArray(user.avt) ? user.avt : [user.avt], // Trả về toàn bộ mảng avt nếu là mảng, nếu không thì tạo mảng mới chứa avt
+        avt: Array.isArray(user.avt) ? user.avt : [user.avt], 
         displayName: user.displayName || `${user.firstName} ${user.lastName}`
       }
     };
@@ -826,6 +890,7 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
     throw new Error(`Lỗi khi chia sẻ bài viết: ${error.message}`);
   }
 };
+
 
 const getAllArticlesByUserService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -1040,16 +1105,19 @@ const rejectReportService = async (reportId) => {
 
 const likeArticleService = async (postId, userId) => {
   try {
+    // Tìm bài viết
     const article = await Article.findById(postId).populate('createdBy');
     if (!article) {
       throw new Error('Bài viết không tồn tại');
     }
 
+    // Tìm người dùng
     const user = await User.findById(userId);
     if (!user) {
       throw new Error('Người dùng không tồn tại');
     }
 
+    // Kiểm tra nếu người dùng đã thích bài viết hay chưa
     const likedIndex = article.interact.emoticons.findIndex(
       (emoticon) =>
         emoticon._iduser?.toString() === userId &&
@@ -1057,7 +1125,6 @@ const likeArticleService = async (postId, userId) => {
     );
 
     let action = '';
-
     if (likedIndex > -1) {
       // Bỏ thích
       article.interact.emoticons.splice(likedIndex, 1);
@@ -1074,8 +1141,10 @@ const likeArticleService = async (postId, userId) => {
       action = 'like';
     }
 
+    // Lưu thay đổi vào bài viết
     await article.save();
 
+    // Phát sự kiện cập nhật likes bài viết
     emitEvent('update_article_likes', {
       postId,
       totalLikes: article.totalLikes,
@@ -1086,13 +1155,22 @@ const likeArticleService = async (postId, userId) => {
     // Tạo thông báo nếu cần
     if (action === 'like' && userId !== article.createdBy._id.toString()) {
       const displayName = user.displayName || 'Người dùng';
-      const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
+      
+      // Lấy avatar từ MyPhoto nếu cần
+      const avtLink = await getUserAvatarLink(user);
+      console.log('avtLink', avtLink);
       const postLink = `http://localhost:5173/new-feeds/${postId}`;
-
+      
+      // Gửi sự kiện like
       emitEvent('like_article_notification', {
         senderId: {
           _id: userId,
-          avt: avt ? [avt] : [''],
+          avt: [
+            {
+              _id: avtLink ? avtLink._id : '', // Đảm bảo rằng _id của avatar được truyền chính xác
+              link: avtLink ? avtLink.link : ''  // Truyền link avatar
+            }
+          ],
           displayName: displayName,
         },
         postId,
@@ -1103,6 +1181,7 @@ const likeArticleService = async (postId, userId) => {
         link: postLink,
       });
 
+      // Lưu thông báo vào database
       const newNotification = new Notification({
         senderId: userId,
         receiverId: article.createdBy._id,
@@ -1125,6 +1204,19 @@ const likeArticleService = async (postId, userId) => {
     throw new Error(error.message);
   }
 };
+
+const getUserAvatarLink = async (user) => {
+  if (user.avt && user.avt.length > 0) {
+    const avtId = user.avt[user.avt.length - 1];
+    const avatar = await MyPhoto.findById(avtId);
+    if (avatar && avatar.link) {
+      return { _id: avatar._id, link: avatar.link }; 
+    }
+  }
+  return { _id: '', link: '' }; 
+};
+
+
 
 
 export const articleService = {

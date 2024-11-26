@@ -4,21 +4,24 @@ const fetchNotifications = async (userId) => {
   try {
     const notifications = await Notification.find({
       receiverId: userId,
-      _destroy: null // Chỉ lấy các thông báo mà _destroy là null (chưa bị xoá mềm)
+      _destroy: null // Only fetch notifications that are not soft-deleted
     })
       .populate({
-        path: 'senderId', // Populate thông tin người gửi
-        select: 'displayName avt' // Chỉ lấy displayName và avt (avatar)
+        path: 'senderId', // Populate the sender information
+        select: 'displayName avt', // Select the fields to return
+        populate: {
+          path: 'avt', // Populate avt (avatar) which is an array of ObjectId referencing MyPhoto
+          select: 'link' // Only fetch the link field from MyPhoto
+        }
       })
-      .sort({
-        createdAt: -1
-      })
+      .sort({ createdAt: -1 }); // Sort by createdAt in descending order
 
-    return notifications
+    return notifications;
   } catch (error) {
-    throw new Error('Error fetching notifications')
+    throw new Error('Error fetching notifications');
   }
 }
+
 
 // Service để cập nhật trạng thái thông báo từ 'unread' sang 'read'
 const updateNotification = async (id, status, readAt) => {
