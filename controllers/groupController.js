@@ -737,80 +737,24 @@ const editGroup = async (req, res) => {
   const { groupId } = req.params;
   const { groupName, introduction, hobbies, rule, userId } = req.body;
 
-  const hobbiesArray = Array.isArray(hobbies) ? hobbies : hobbies ? hobbies.split(',').map(hobby => hobby.trim()) : [];
-
   try {
-    const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ message: 'Nhóm không tồn tại.' });
-    }
+    const updatedGroup = await groupService.editGroupService(
+      groupId,
+      userId,
+      groupName,
+      introduction,
+      hobbies,
+      rule,
+      req.files
+    );
 
-    // Kiểm tra xem userId có phải là chủ nhóm không
-    if (group.idAdmin.toString() !== userId) {
-      return res.status(403).json({
-        message: 'Bạn không có quyền chỉnh sửa nhóm này vì bạn không phải là chủ nhóm.'
-      });
-    }
-
-    // Nếu có file ảnh đại diện mới, cập nhật
-    if (req.files?.avt) {
-      const oldAvt = await MyPhoto.findById(group.avt);
-      if (oldAvt) {
-        await MyPhoto.findByIdAndUpdate(oldAvt._id, { _destroy: new Date() });
-        await cloudStorageService.deleteImageFromStorage(oldAvt.link);
-      }
-      
-      const avtPhoto = await MyPhoto.create({
-        name: req.files.avt[0].originalname,
-        idAuthor: userId,
-        type: 'img',
-        link: 'placeholder-url',
-      });
-      const avtFileName = `group/${groupId}/avt/${avtPhoto._id}`;
-      const avtUrl = await cloudStorageService.uploadImageStorage(req.files.avt[0], avtFileName);
-
-      if (avtUrl) {
-        await MyPhoto.findByIdAndUpdate(avtPhoto._id, { link: avtUrl });
-        group.avt = avtPhoto._id;
-      }
-    }
-
-    // Nếu có file ảnh nền mới, cập nhật
-    if (req.files?.backGround) {
-      const oldBackground = await MyPhoto.findById(group.backGround);
-      if (oldBackground) {
-        await MyPhoto.findByIdAndUpdate(oldBackground._id, { _destroy: new Date() });
-        await cloudStorageService.deleteImageFromStorage(oldBackground.link);
-      }
-
-      const backGroundPhoto = await MyPhoto.create({
-        name: req.files.backGround[0].originalname,
-        idAuthor: userId,
-        type: 'img',
-        link: 'placeholder-url',
-      });
-      const backGroundFileName = `group/${groupId}/background/${backGroundPhoto._id}`;
-      const backGroundUrl = await cloudStorageService.uploadImageStorage(req.files.backGround[0], backGroundFileName);
-
-      if (backGroundUrl) {
-        await MyPhoto.findByIdAndUpdate(backGroundPhoto._id, { link: backGroundUrl });
-        group.backGround = backGroundPhoto._id;
-      }
-    }
-
-    // Cập nhật thông tin nhóm
-    group.groupName = groupName || group.groupName;
-    group.introduction = introduction || group.introduction;
-    group.hobbies = hobbiesArray.length > 0 ? hobbiesArray : group.hobbies;
-    group.rule = rule || group.rule;
-
-    const updatedGroup = await group.save();
     res.status(200).json({ message: 'Cập nhật nhóm thành công!', group: updatedGroup });
   } catch (error) {
-    console.error('Lỗi khi chỉnh sửa nhóm:', error);
+    console.error('Lỗi khi chỉnh sửa nhóm:', error.message);
     res.status(500).json({ message: 'Có lỗi xảy ra khi chỉnh sửa nhóm.', error: error.message });
   }
 };
+
 
 
 const deleteGroup = async (req, res) => {

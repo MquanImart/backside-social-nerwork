@@ -183,10 +183,6 @@ const registerService = async ({
 
 
 
-
-
-
-
 // Service xử lý logic đăng nhập
 const loginService = async (email, password) => {
   try {
@@ -194,7 +190,10 @@ const loginService = async (email, password) => {
     if (!user) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
-
+    if (user.status === 'locked') {
+      return { success: false, message: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' }
+    }
+    
     const isMatch = await bcrypt.compare(password, user.account.password)
     if (!isMatch) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
@@ -368,6 +367,97 @@ const logoutAdminService = async (req) => {
   }
 }
 
+const initiatePasswordReset = async (email) => {
+  try {
+    const user = await User.findOne({ 'account.email': email });
+    if (!user) {
+      return { success: false, message: 'Email không tồn tại.', status: 404 };
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await PasswordResetToken.create({
+      userId: user._id,
+      otpCode,
+      expiresAt,
+    });
+
+    const message = `
+      <h2>Mã OTP đặt lại mật khẩu</h2>
+      <p>Mã OTP của bạn là:</p>
+      <h3>${otpCode}</h3>
+      <p>Mã này sẽ hết hạn sau 5 phút.</p>
+    `;
+
+    await transporter.sendMail({
+      from: env.EMAIL_USER,
+      to: user.account.email,
+      subject: 'OTP đặt lại mật khẩu',
+      html: message,
+    });
+
+    return { success: true, message: 'Mã OTP đã được gửi đến email của bạn.' };
+  } catch (error) {
+    console.error('Lỗi trong initiatePasswordReset:', error);
+    throw error;
+  }
+};
+
+const verifyOtpCode = async (email, otpCode) => {
+  try {
+    const user = await User.findOne({ 'account.email': email });
+    if (!user) {
+      return { success: false, message: 'Người dùng không tồn tại.', status: 404 };
+    }
+
+    const tokenEntry = await PasswordResetToken.findOne({
+      userId: user._id,
+      otpCode,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!tokenEntry) {
+      return { success: false, message: 'Mã OTP không hợp lệ hoặc đã hết hạn.', status: 400 };
+    }
+
+    return { success: true, message: 'OTP verified successfully.' };
+  } catch (error) {
+    console.error('Lỗi trong verifyOtpCode:', error);
+    throw error;
+  }
+};
+
+const resetUserPassword = async (email, otpCode, newPassword) => {
+  try {
+    const user = await User.findOne({ 'account.email': email });
+    if (!user) {
+      return { success: false, message: 'Người dùng không tồn tại.', status: 404 };
+    }
+
+    const tokenEntry = await PasswordResetToken.findOne({
+      userId: user._id,
+      otpCode,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!tokenEntry) {
+      return { success: false, message: 'Mã OTP không hợp lệ hoặc đã hết hạn.', status: 400 };
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.account.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    await PasswordResetToken.deleteOne({ _id: tokenEntry._id });
+
+    return { success: true, message: 'Đặt lại mật khẩu thành công.' };
+  } catch (error) {
+    console.error('Lỗi trong resetUserPassword:', error);
+    throw error;
+  }
+};
+
 export const authService = {
   registerService,
   loginService,
@@ -375,5 +465,8 @@ export const authService = {
   checkCCCDService,
   loginAdminService,
   registerAdminService,
-  logoutAdminService
+  logoutAdminService,
+  initiatePasswordReset,
+  verifyOtpCode,
+  resetUserPassword
 }

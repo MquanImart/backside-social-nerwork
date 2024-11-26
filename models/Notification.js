@@ -15,7 +15,8 @@ const notificationSchema = new mongoose.Schema({
   status: { type: String, enum: ['read', 'unread'], default: 'unread' },
   readAt: Date,
   createdAt: { type: Date, default: Date.now },
-  _destroy: Date
+  _destroy: Date,
+  link: { type: String, required: false } 
 })
 
 const Notification = mongoose.model('Notification', notificationSchema)
