@@ -746,12 +746,22 @@ const editGroup = async (req, res) => {
       req.files
     );
 
-    res.status(200).json({ message: 'Cập nhật nhóm thành công!', group: updatedGroup });
+    // Populate the avt and backGround fields with MyPhoto details
+    const populatedGroup = await Group.findById(updatedGroup._id)
+      .populate('avt') // Populate the avt field
+      .populate('backGround'); // Populate the backGround field
+
+    // Send the response in the desired format
+    res.status(200).json({
+      message: 'Cập nhật nhóm thành công!',
+      group: populatedGroup
+    });
   } catch (error) {
     console.error('Lỗi khi chỉnh sửa nhóm:', error.message);
     res.status(500).json({ message: 'Có lỗi xảy ra khi chỉnh sửa nhóm.', error: error.message });
   }
 };
+
 
 
 

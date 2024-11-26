@@ -104,7 +104,7 @@ Router.post('/:groupId/join', groupController.sendJoinRequest)
 // API thu hồi yêu cầu tham gia nhóm
 Router.post('/:groupId/revoke-request', groupController.revokeRequest)
 // API chỉnh nhóm
-Router.put(
+Router.patch(
   '/:groupId/edit',
   upload.fields([
     { name: 'avt', maxCount: 1 },
