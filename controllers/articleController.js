@@ -274,38 +274,6 @@ const shareArticle = async (req, res) => {
       userId
     });
 
-    // Tìm bài viết gốc và người dùng
-    const article = await Article.findById(postId).populate('createdBy');
-    if (!article) {
-      return res.status(404).json({ message: 'Bài viết không tồn tại' });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại' });
-    }
-
-    // Lấy displayName và avatar của người dùng
-    const displayName = user.displayName || 'Người dùng';
-    const avt = user.avt && user.avt.length > 0 ? user.avt[user.avt.length - 1] : '';
-    const originalPostLink = `http://localhost:5173/new-feeds/${postId}`; 
-    // Chỉ phát thông báo nếu người chia sẻ không phải là người tạo bài viết
-    if (userId !== article.createdBy._id.toString()) {
-      emitEvent('share_notification', {
-        senderId: {
-          _id: userId,
-          avt: avt ? [avt] : [''], // Gửi avatar của người chia sẻ
-          displayName
-        },
-        postId,
-        receiverId: article.createdBy._id,
-        message: `${displayName} đã chia sẻ bài viết của bạn`,
-        status: 'unread',
-        createdAt: new Date(),
-        originalPostLink
-      });
-    }
-
     return res.status(201).json({
       message: 'Bài viết đã được chia sẻ thành công',
       post: sharedArticle
@@ -318,6 +286,7 @@ const shareArticle = async (req, res) => {
     });
   }
 };
+
 
 
 const reportArticle = async (req, res) => {
