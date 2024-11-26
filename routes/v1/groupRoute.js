@@ -125,5 +125,7 @@ Router.get(
 Router.post('/invite-member', groupController.inviteFriendsToGroup)
 Router.post('/:groupId/lock', groupController.lockGroup);
 Router.post('/:groupId/unlock', groupController.unlockGroup);
+Router.get('/:groupId', groupController.getGroupDetails);
+
 
 export const groupRoute = Router

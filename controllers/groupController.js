@@ -3,7 +3,7 @@ import { groupService } from '../services/groupServices.js'
 import Group from '../models/Group.js'
 import { cloudStorageService } from '../services/cloudStorageService.js'
 import MyPhoto from '../models/MyPhoto.js'
-import { badWords } from '@vnphu/vn-badwords';
+import { checkBadWords } from '../config/badWords.js'
 
 const getUserGroups = async (req, res) => {
   try {
@@ -155,13 +155,12 @@ const createGroupArticle = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin bài viết hoặc người dùng.' });
     }
 
-    if (badWords(content, { validate: true })) {
+    if (checkBadWords(content)) {
       return res.status(400).json({
         message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
       });
     }
 
-    // Xử lý upload ảnh và video, lưu vào `MyPhoto`
     let listPhoto = [];
     if (req.files && req.files.length > 0) {
       listPhoto = await Promise.all(
@@ -175,8 +174,8 @@ const createGroupArticle = async (req, res) => {
           const newPhoto = new MyPhoto({
             name: file.originalname,
             idAuthor: userId,
-            type: fileType, // loại "img" hoặc "video"
-            link: "placeholder_link" // Liên kết tạm thời
+            type: fileType, 
+            link: "placeholder_link" 
           });
 
           const savedPhoto = await newPhoto.save();
@@ -185,10 +184,9 @@ const createGroupArticle = async (req, res) => {
           const fileName = `v1/user/${userId}/article/${savedPhoto._id}`;
           const link = await cloudStorageService.uploadImageStorage(file, fileName);
 
-          // Cập nhật link của ảnh sau khi upload
           await MyPhoto.findByIdAndUpdate(savedPhoto._id, { link });
 
-          return savedPhoto._id; // Trả về ObjectId của ảnh hoặc video đã lưu
+          return savedPhoto._id; 
         })
       );
     }
@@ -880,6 +878,30 @@ const unlockGroup = async (req, res, next) => {
   }
 };
 
+const getGroupDetails = async (req, res) => {
+  try {
+    const { groupId } = req.params;  // Lấy groupId từ tham số URL
+
+    // Gọi service để lấy thông tin chi tiết của nhóm
+    const groupDetails = await groupService.getGroupDetailsService(groupId);
+
+    if (!groupDetails) {
+      return res.status(404).json({
+        message: 'Nhóm không tồn tại hoặc không tìm thấy.'
+      });
+    }
+
+    // Trả về kết quả
+    return res.status(200).json({
+      message: 'Lấy thông tin nhóm thành công.',
+      group: groupDetails
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy thông tin nhóm:', error.message);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
 
 
 export const groupController = {
@@ -918,5 +940,6 @@ export const groupController = {
   inviteFriendsToGroup,
   getAllGroups,
   lockGroup,
-  unlockGroup
+  unlockGroup,
+  getGroupDetails
 }
