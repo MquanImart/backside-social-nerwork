@@ -11,7 +11,7 @@ const bucket = storage.bucket(env.BUCKET_NAME)
 // Hàm tải ảnh lên Google Cloud Storage
 const uploadImageToStorage = async (file) => {
   if (!file) throw new Error('No image file provided')
-  const fileName = `${Date.now()}_${file.originalname}`
+  const fileName = `v1/${Date.now()}_${file.originalname}`
   const fileUpload = bucket.file(fileName)
 
 
@@ -38,7 +38,7 @@ const uploadImageUserToStorage = async (file, userId, folderType) => {
   if (!file) throw new Error('No image file provided')
 
   // Tạo đường dẫn lưu trữ file trong folder theo userId và folderType (avatar hoặc background)
-  const fileName = `user/${userId}/${folderType}/${Date.now()}_${
+  const fileName = `v1/user/${userId}/${folderType}/${Date.now()}_${
     file.originalname
   }`
   const fileUpload = bucket.file(fileName)
@@ -67,7 +67,7 @@ const uploadImageConversationsToStorage = async (file, conversationId, folderTyp
   if (!file) throw new Error('No image file provided')
 
   // Tạo đường dẫn lưu trữ file trong folder theo userId và folderType (avatar hoặc background)
-  const fileName = `conversations/${conversationId}/${folderType}/${Date.now()}_${
+  const fileName = `v1/conversations/${conversationId}/${folderType}/${Date.now()}_${
     file.originalname
   }`
   const fileUpload = bucket.file(fileName)

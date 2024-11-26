@@ -50,7 +50,7 @@ const createArticle = async (req, res) => {
             });
 
             const savedPhoto = await newPhoto.save();
-            const fileName = `user/${userId}/article/${savedPhoto._id}`;
+            const fileName = `v1/user/${userId}/article/${savedPhoto._id}`;
             const link = await cloudStorageService.uploadImageStorage(file, fileName);
 
             await MyPhoto.findByIdAndUpdate(savedPhoto._id, { link });
