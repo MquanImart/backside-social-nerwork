@@ -1,7 +1,9 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 import AddFriends from '../models/AddFriends.js';
 import MyPhoto from '../models/MyPhoto.js';
+import { emitEvent } from '../sockets/socket.js'
 
 const getAllFriendByIdUser = async (userId) => {
     try {
@@ -101,6 +103,49 @@ const addFriend = async (senderId, receiverId) => {
 
         await newAddFriend.save();
 
+        const sender = await User.findById(senderId);
+        const receiver = await User.findById(receiverId);
+        const senderName = sender.displayName || 'Người dùng';
+
+        const avtLink = await getUserAvatarLink(sender);
+        
+        const link = `http://localhost:5173/friends/friends-request`;
+
+        const notificationMessage = `${senderName} đã gửi lời mời kết bạn tới bạn.`;
+
+        const newNotification = new Notification({
+          senderId: senderId,
+          receiverId: receiverId,
+          avt: [
+            {
+              _id: avtLink ? avtLink._id : '', 
+              link: avtLink ? avtLink.link : '' 
+            }
+          ],
+          message: notificationMessage,
+          status: 'unread',
+          createdAt: new Date(),
+          link: link,
+        });
+
+        await newNotification.save();
+
+        // Phát sự kiện thông báo nếu có
+        emitEvent('friend_request_notification', {
+          senderId: senderId,
+          receiverId: receiverId,
+          avt: [
+            {
+              _id: avtLink ? avtLink._id : '',
+              link: avtLink ? avtLink.link : ''
+            }
+          ],
+          message: notificationMessage,
+          status: 'unread',
+          createdAt: new Date(),
+          link: link,
+        });
+
         return true;
     } catch (error) {
         throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
@@ -143,66 +188,115 @@ const getAllFriendRequest = async (userId, page) => {
 
 const updateSatusFriendRequest = async (requestId, status) => {
   try {
-      if (!mongoose.Types.ObjectId.isValid(requestId)) {
-          throw new Error('ID lời mời không hợp lệ. ID phải có 24 ký tự hợp lệ.')
-        }
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      throw new Error('ID lời mời không hợp lệ. ID phải có 24 ký tự hợp lệ.');
+    }
 
-      const requestObjectId = new mongoose.Types.ObjectId(requestId);
-      
-      const result = await AddFriends.findByIdAndUpdate(
-        requestObjectId,
-        { status: status,
-          acceptedAt: new Date()
-         },
-        { new: true }
-      );
+    const requestObjectId = new mongoose.Types.ObjectId(requestId);
 
-      if (!result) {
-        throw new Error('Không tìm thấy lời mời với ID được cung cấp.');
+    const result = await AddFriends.findByIdAndUpdate(
+      requestObjectId,
+      {
+        status: status,
+        acceptedAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      throw new Error('Không tìm thấy lời mời với ID được cung cấp.');
+    }
+
+    if (status === 'accepted') {
+      const sender = await User.findById(result.senderId);
+      const receiver = await User.findById(result.receiverId);
+
+      if (!sender) {
+        throw new Error('Không tìm thấy người dùng với senderId.');
+      }
+      if (!receiver) {
+        throw new Error('Không tìm thấy người dùng với receiverId.');
       }
 
-      if (status === 'accepted') {
-        const sender = await User.findById(result.senderId);
-        const receive = await User.findById(result.receiverId);
-
-        if (!sender) {
-          throw new Error('Không tìm thấy người dùng với senderId.');
-        }
-        if (!receive) {
-          throw new Error('Không tìm thấy người dùng với receiverId.');
-        }
-
-        if (!sender.friends.includes(result.receiverId)) {
-          const updatedSender = await User.findByIdAndUpdate(
-            result.senderId,
-            { $push: { friends: {
-              idUser: result.receiverId,
-              addDate: new Date()
-            } } },
-            { new: true }
-          );
-        } else {
-          throw new Error('Người dùng này đã là bạn bè.');
-        }
-
-        if (!receive.friends.includes(result.senderId)) {
-          const updatedReceive = await User.findByIdAndUpdate(
-            result.receiverId,
-            { $push: { friends: {
-              idUser: result.senderId,
-              addDate: new Date()
-            } } },
-            { new: true }
-          );
-        } else {
-          throw new Error('Người dùng này đã là bạn bè.');
-        }
+      // Thêm bạn cho sender nếu chưa có
+      if (!sender.friends.includes(result.receiverId)) {
+        const updatedSender = await User.findByIdAndUpdate(
+          result.senderId,
+          {
+            $push: {
+              friends: {
+                idUser: result.receiverId,
+                addDate: new Date(),
+              },
+            },
+          },
+          { new: true }
+        );
+      } else {
+        throw new Error('Người dùng này đã là bạn bè.');
       }
-      return true;
+
+      // Thêm bạn cho receiver nếu chưa có
+      if (!receiver.friends.includes(result.senderId)) {
+        const updatedReceiver = await User.findByIdAndUpdate(
+          result.receiverId,
+          {
+            $push: {
+              friends: {
+                idUser: result.senderId,
+                addDate: new Date(),
+              },
+            },
+          },
+          { new: true }
+        );
+      } else {
+        throw new Error('Người dùng này đã là bạn bè.');
+      }
+
+      // Gửi thông báo cho người nhận
+      const displayName = sender.displayName || 'Người dùng';
+      const postLink = `http://localhost:5173/profile?id=${receiver._id}`;
+      const avtLink = await getUserAvatarLink(receiver);
+      // Gửi sự kiện thông báo (emit)
+      emitEvent('friend_request_accepted', {
+        senderId: {
+          _id: receiver._id,
+          avt: [
+            {
+              _id: avtLink ? avtLink._id : '',
+              link: avtLink ? avtLink.link : ''
+            }
+          ],
+          displayName: receiver.displayName,
+        },
+        receiverId: sender._id,
+        message: `${displayName} đã chấp nhận lời mời kết bạn của bạn.`,
+        status: 'unread',
+        createdAt: new Date(),
+        link: postLink,
+      });
+
+      // Lưu thông báo vào database
+      const newNotification = new Notification({
+        senderId: sender._id,
+        receiverId: receiver._id,
+        message: `${displayName} đã chấp nhận lời mời kết bạn của bạn.`,
+        status: 'unread',
+        createdAt: new Date(),
+        link: postLink,
+      });
+
+      await newNotification.save();
+    }
+
+    return true;
   } catch (error) {
-      throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
+    console.error('Lỗi trong quá trình xử lý lời mời kết bạn:', error);
+    throw new Error('Có lỗi xảy ra xong khi xử lý lời mời kết bạn:', error);
   }
-}
+};
+
 
 const getMyRequest = async (userId, page) => {
   try {
@@ -289,6 +383,16 @@ const unFriend = async (userId, friendId) => {
   
   return true;
 }
+const getUserAvatarLink = async (user) => {
+  if (user.avt && user.avt.length > 0) {
+    const avtId = user.avt[user.avt.length - 1];
+    const avatar = await MyPhoto.findById(avtId);
+    if (avatar && avatar.link) {
+      return { _id: avatar._id, link: avatar.link }; 
+    }
+  }
+  return { _id: '', link: '' }; 
+};
 
 export const friendService = {
     getAllFriendByIdUser,
