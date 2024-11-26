@@ -245,16 +245,29 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
 
   await group.save();
 
-  const personalManagementLink = `http://localhost:5173/group/${group._id}/personal-management`; // Tạo link tới trang quản lý cá nhân của nhóm
+  const personalManagementLink = `http://localhost:5173/group/${group._id}/personal-management`;
 
-  // Thông báo socket khi người dùng được thêm làm quản trị viên
+  const currentUser = await User.findById(currentUserId);
+  const senderAvatar = await getUserAvatarLink(currentUser);
+  const senderDisplayName = currentUser.displayName || 'Người quản trị';
+
   emitEvent('invite_become_admin', {
-    senderId: currentUserId, // Người đã thêm admin
-    receiverId: adminId, // Người nhận thông báo (quản trị viên mới)
+    senderId: {
+      _id: currentUserId,
+      avt: [
+        {
+          _id: senderAvatar._id || '', 
+          link: senderAvatar.link || ''
+        }
+      ],
+      displayName: senderDisplayName,
+    },
+    receiverId: adminId, 
     message: `Bạn đã được mời làm quản trị viên của nhóm ${group.groupName}.`,
     groupId: group._id,
+    status: 'unread',
     createdAt: new Date(),
-    link: personalManagementLink // Thêm link vào sự kiện socket
+    link: personalManagementLink 
   });
 
   const notification = new Notification({
@@ -263,7 +276,7 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
     message: `Bạn đã được mời làm quản trị viên của nhóm ${group.groupName}.`,
     status: 'unread',
     createdAt: new Date(),
-    link: personalManagementLink // Thêm link vào thông báo
+    link: personalManagementLink
   });
 
   await notification.save();
@@ -636,11 +649,16 @@ const acceptInviteService = async (groupId, userId) => {
   group.members.count += 1
 
   await group.save()
+
+  const admin = await User.findById(group.idAdmin);
+  const adminAvatar = await getUserAvatarLink(admin); 
+  const adminDisplayName = admin.displayName || 'Người quản trị';
+
   const groupLink = `http://localhost:5173/group/${group._id}`; 
   const notification = new Notification({
     senderId: group.idAdmin,
     receiverId: userId,
-    message: `Bạn đã trở thành thành viên của nhóm ${group.groupName}.`,
+    message: ` Nhóm ${group.groupName} phê duyệt yêu cầu tham gia`,
     status: 'unread',
     createdAt: new Date(),
     link: groupLink
@@ -649,10 +667,20 @@ const acceptInviteService = async (groupId, userId) => {
   await notification.save()
 
   emitEvent('user_accepted_notification', {
-    senderId: group.idAdmin,
+    senderId: {
+      _id: group.idAdmin,
+      avt: [
+        {
+          _id: adminAvatar._id || '', 
+          link: adminAvatar.link || ''  
+        }
+      ],
+      displayName: adminDisplayName,
+    },
     receiverId: userId,
-    message: `Bạn đã trở thành thành viên của nhóm ${group.groupName}.`,
+    message: ` Nhóm ${group.groupName} phê duyệt yêu cầu tham gia`,
     groupId: group._id,
+    status: 'unread',
     createdAt: new Date(),
     link: groupLink
   })
@@ -1468,14 +1496,19 @@ const inviteFriendsToGroupService = async (userId, groupId, invitedFriends) => {
       await notification.save();
 
       // Lấy thông tin người gửi để gửi thông báo real-time
-      const sender = await User.findById(userId).select('displayName avt');
-
+      const sender = await User.findById(userId)
+      const avtLink = await getUserAvatarLink(sender);
       // Phát sự kiện real-time
       emitEvent('new_group_invite_notification', {
         senderId: {
           _id: userId,
+          avt: [
+            {
+              _id: avtLink ? avtLink._id : '', // Đảm bảo rằng _id của avatar được truyền chính xác
+              link: avtLink ? avtLink.link : ''  // Truyền link avatar
+            }
+          ],
           displayName: sender.displayName,
-          avt: sender.avt ? [sender.avt] : ['']
         },
         groupId,
         receiverId: receiver._id,
@@ -1573,6 +1606,16 @@ const unlockGroupService = async (groupId) => {
   return group;
 };
 
+const getUserAvatarLink = async (user) => {
+  if (user.avt && user.avt.length > 0) {
+    const avtId = user.avt[user.avt.length - 1];
+    const avatar = await MyPhoto.findById(avtId);
+    if (avatar && avatar.link) {
+      return { _id: avatar._id, link: avatar.link }; 
+    }
+  }
+  return { _id: '', link: '' }; 
+};
 
 export const groupService = {
   getUserGroupsService,
