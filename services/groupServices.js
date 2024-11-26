@@ -1617,6 +1617,34 @@ const getUserAvatarLink = async (user) => {
   return { _id: '', link: '' }; 
 };
 
+const getGroupDetailsService = async (groupId) => {
+  // Kiểm tra tính hợp lệ của groupId
+  if (!mongoose.Types.ObjectId.isValid(groupId)) {
+    throw new Error('ID nhóm không hợp lệ.');
+  }
+
+  // Lấy thông tin nhóm từ database
+  const groupDetails = await Group.findById(groupId)
+    .populate({
+      path: 'avt', // Lấy avatar của nhóm
+      model: 'MyPhoto',
+      select: 'name link type' // Chỉ lấy các trường cần thiết từ MyPhoto
+    })
+    .populate({
+      path: 'backGround', // Lấy background của nhóm
+      model: 'MyPhoto',
+      select: 'name link type' // Chỉ lấy các trường cần thiết từ MyPhoto
+    })
+    .populate({
+      path: 'members.listUsers',  // Lấy thông tin thành viên
+      select: 'name email avatar' // Lấy các trường cần thiết của người dùng
+    })
+    .lean(); // Sử dụng lean() để trả về object thuần, không phải instance Mongoose
+
+  return groupDetails;
+};
+
+
 export const groupService = {
   getUserGroupsService,
   getAllGroupArticlesService,
@@ -1653,5 +1681,6 @@ export const groupService = {
   inviteFriendsToGroupService,
   getAllGroupsService,
   lockGroupService,
-  unlockGroupService
+  unlockGroupService,
+  getGroupDetailsService
 }

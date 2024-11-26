@@ -5,7 +5,7 @@ import { cloudStorageService } from '../services/cloudStorageService.js'
 import { emitEvent } from '../sockets/socket.js'
 import MyPhoto from '../models/MyPhoto.js'
 import Notification from '../models/Notification.js' // Import Notification model
-import { badWords } from '@vnphu/vn-badwords';
+import { checkBadWords } from '../config/badWords.js'
 
 const getArticleById = async (req, res) => {
   try {
@@ -28,7 +28,7 @@ const createArticle = async (req, res) => {
   try {
     const { content, scope, hashTag, userId } = req.body;
 
-    if (badWords(content, { validate: true })) {
+    if (checkBadWords(content)) {
       return res.status(400).json({
         message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
       });
