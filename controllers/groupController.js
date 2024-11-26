@@ -89,7 +89,7 @@ const createGroup = async (req, res) => {
       });
       avtPhotoId = avtPhoto._id;
 
-      const avtFileName = `group/${groupId}/avt/${avtPhotoId}`;
+      const avtFileName = `v1/group/${groupId}/avt/${avtPhotoId}`;
       const avtUrl = await cloudStorageService.uploadImageStorage(req.files.avt[0], avtFileName);
 
       // Cập nhật link thực tế
@@ -106,7 +106,7 @@ const createGroup = async (req, res) => {
       });
       backGroundPhotoId = backGroundPhoto._id;
 
-      const backGroundFileName = `group/${groupId}/background/${backGroundPhotoId}`;
+      const backGroundFileName = `v1/group/${groupId}/background/${backGroundPhotoId}`;
       const backGroundUrl = await cloudStorageService.uploadImageStorage(req.files.backGround[0], backGroundFileName);
 
       // Cập nhật link thực tế
@@ -182,7 +182,7 @@ const createGroupArticle = async (req, res) => {
           const savedPhoto = await newPhoto.save();
 
           // Đặt tên file và tải lên Cloud Storage
-          const fileName = `user/${userId}/article/${savedPhoto._id}`;
+          const fileName = `v1/user/${userId}/article/${savedPhoto._id}`;
           const link = await cloudStorageService.uploadImageStorage(file, fileName);
 
           // Cập nhật link của ảnh sau khi upload

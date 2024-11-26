@@ -1238,7 +1238,7 @@ const editGroupService = async (groupId, userId, groupName, introduction, hobbie
       type: 'img',
       link: 'placeholder-url',
     });
-    const avtFileName = `group/${groupId}/avt/${avtPhoto._id}`;
+    const avtFileName = `v1/group/${groupId}/avt/${avtPhoto._id}`;
     const avtUrl = await cloudStorageService.uploadImageStorage(files.avt[0], avtFileName);
 
     if (avtUrl) {
@@ -1261,7 +1261,7 @@ const editGroupService = async (groupId, userId, groupName, introduction, hobbie
       type: 'img',
       link: 'placeholder-url',
     });
-    const backGroundFileName = `group/${groupId}/background/${backGroundPhoto._id}`;
+    const backGroundFileName = `v1/group/${groupId}/background/${backGroundPhoto._id}`;
     const backGroundUrl = await cloudStorageService.uploadImageStorage(files.backGround[0], backGroundFileName);
 
     if (backGroundUrl) {
