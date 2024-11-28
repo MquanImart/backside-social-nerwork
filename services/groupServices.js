@@ -39,39 +39,42 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
       throw new Error('ID người dùng không hợp lệ.');
     }
 
+    // Lấy các nhóm người dùng đã tham gia với trạng thái "accepted"
     const userGroups = await Group.find({
       'members.listUsers': {
         $elemMatch: { idUser: userId, state: 'accepted' },
       },
-    }).select('article');
+    }).select('article'); // Chỉ lấy trường 'article'
 
     if (!userGroups || userGroups.length === 0) return [];
 
+    // Lọc các bài viết đã duyệt trong các nhóm (trạng thái 'processed')
     const processedArticleIds = userGroups.reduce((acc, group) => {
       if (group.article && Array.isArray(group.article.listArticle)) {
         const groupArticles = group.article.listArticle
-          .filter((article) => article.state === 'processed')
-          .map((article) => article.idArticle);
+          .filter((article) => article.state === 'processed') // Lọc bài viết đã duyệt
+          .map((article) => article.idArticle); // Lấy ID bài viết
         return acc.concat(groupArticles);
       }
       return acc;
     }, []);
 
-    if (processedArticleIds.length === 0) return [];
+    if (processedArticleIds.length === 0) return []; // Nếu không có bài viết nào đã duyệt
 
     const skip = (page - 1) * limit;
-    
+
+    // Lấy bài viết từ danh sách ID bài viết đã duyệt, đảm bảo không có thời gian _destroy
     const articles = await Article.find({
       _id: { $in: processedArticleIds },
-      _destroy: { $exists: false },
+      _destroy: { $exists: false }, // Không lấy bài viết có trường _destroy
     })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
+      .sort({ createdAt: -1 }) // Sắp xếp bài viết theo thời gian tạo giảm dần
+      .skip(skip) // Phân trang
+      .limit(limit) // Giới hạn số bài viết mỗi trang
       .populate({
         path: 'createdBy',
         select: 'firstName lastName displayName avt',
-        populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của createdBy
+        populate: { path: 'avt', select: 'name link type' }, // Lấy ảnh đại diện của người tạo bài viết
       })
       .populate({
         path: 'groupID',
@@ -88,7 +91,7 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
           { 
             path: '_iduser',
             select: 'firstName lastName displayName avt',
-            populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng comment
+            populate: { path: 'avt', select: 'name link type' }, // Lấy ảnh đại diện của người bình luận
           },
           {
             path: 'replyComment',
@@ -96,25 +99,26 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
             populate: {
               path: '_iduser',
               select: 'firstName lastName displayName avt',
-              populate: { path: 'avt', select: 'name link type' }, // Lấy myPhoto của người dùng reply
+              populate: { path: 'avt', select: 'name link type' }, // Lấy ảnh đại diện của người trả lời bình luận
             },
           },
         ],
       })
-      .populate('listPhoto', 'name link type') // Lấy myPhoto trong listPhoto
-      .lean();
+      .populate('listPhoto', 'name link type') // Lấy ảnh từ listPhoto trong bài viết
+      .lean(); // Tránh trả về Mongoose Document, chỉ lấy data thuần
 
     return articles.map((article) => ({
       ...article,
-      totalLikes: article.totalLikes || 0,
-      totalComments: article.totalComments || 0,
-      listPhoto: article.listPhoto || [],
+      totalLikes: article.totalLikes || 0, // Đảm bảo trả về tổng số lượt thích
+      totalComments: article.totalComments || 0, // Đảm bảo trả về tổng số lượt bình luận
+      listPhoto: article.listPhoto || [], // Đảm bảo trả về danh sách ảnh
     }));
   } catch (error) {
     console.error('Lỗi khi lấy bài viết của nhóm:', error);
     throw new Error('Lỗi khi lấy bài viết của nhóm.');
   }
 };
+
 
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
@@ -164,7 +168,6 @@ const getNotJoinedGroupsService = async (userId) => {
   }
 };
 
-
 // Hàm tạo nhóm mới
 const createGroupService = async ({
   groupName,
@@ -200,7 +203,6 @@ const createGroupService = async ({
   const savedGroup = await newGroup.save();
   return savedGroup;
 };
-
 
 // Hàm thêm một quản trị viên mới (Administrator) vào nhóm
 const addAdminService = async (groupId, adminId, currentUserId) => {
@@ -931,7 +933,8 @@ const getUserArticlesInGroupService = async (groupId, userId, page = 1, limit = 
     const articles = await Article.find({
       groupID: groupId,
       createdBy: userId, // Chỉ lấy bài viết của người dùng cụ thể trong nhóm đã chỉ định
-      _destroy: { $exists: false } // Bỏ qua các bài viết bị xóa mềm
+      _destroy: { $exists: false }, // Bỏ qua các bài viết bị xóa mềm
+      state: 'processed', // Lọc bài viết có trạng thái 'processed' (đã duyệt)
     })
       .sort({ createdAt: -1 }) // Sắp xếp theo thời gian mới nhất
       .skip(skip)
@@ -969,10 +972,9 @@ const getUserArticlesInGroupService = async (groupId, userId, page = 1, limit = 
           },
         ],
       })
-      .populate('listPhoto', 'name link type') // Lấy danh sách ảnh trong bài viết
+      .populate('listPhoto', 'name link type') 
       .lean();
 
-    // Đảm bảo trả về các trường cần thiết cho mỗi bài viết
     return articles.map((article) => ({
       ...article,
       totalLikes: article.totalLikes || 0,
