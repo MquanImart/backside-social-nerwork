@@ -116,6 +116,7 @@ const getAllUsersService = async () => {
     const users = await User.find()
       .populate('avt', 'name link type') 
       .populate('backGround', 'name link type')
+      .populate('hobbies', 'name')  
 
     // Trả về danh sách người dùng
     return users

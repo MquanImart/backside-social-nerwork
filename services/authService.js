@@ -6,8 +6,10 @@ import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
 import axios from 'axios'
 import FormData from 'form-data'
+import mongoose from 'mongoose'
 import MyPhoto from '../models/MyPhoto.js'
 import { Readable } from 'stream'
+import Hobby from '../models/Hobby.js'
 import {emitEvent} from '../sockets/socket.js'
 
 const bufferToStream = (buffer) => {
@@ -115,16 +117,38 @@ const registerService = async ({
         message: 'Email hoặc Tên người dùng đã tồn tại.'
       };
     }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     const newDate = parseDate(birthDate);
+
+    // Kiểm tra và xử lý hobbies
+    let hobbyIds = [];
+    if (hobbies) {
+      // Tách chuỗi ID thành mảng nếu là chuỗi
+      if (typeof hobbies === 'string') {
+        hobbyIds = hobbies.split(',').map(hobbyId => new mongoose.Types.ObjectId(hobbyId));  // Sử dụng new mongoose.Types.ObjectId()
+      } else if (Array.isArray(hobbies)) {
+        hobbyIds = hobbies.map(hobbyId => new mongoose.Types.ObjectId(hobbyId));  // Sử dụng new mongoose.Types.ObjectId()
+      }
+
+      // Kiểm tra xem các ID này có tồn tại trong bảng Hobby không
+      const foundHobbies = await Hobby.find({ _id: { $in: hobbyIds } });
+      if (foundHobbies.length !== hobbyIds.length) {
+        return {
+          success: false,
+          message: 'Một hoặc nhiều sở thích không hợp lệ.'
+        };
+      }
+    }
+
     const newUser = new User({
       account: { email, password: hashedPassword },
       firstName,
       lastName,
       userName,
       details: { phoneNumber, address, gender: genderBoolean, birthDate: newDate },
-      hobbies
+      hobbies: hobbyIds // Lưu danh sách ID của sở thích hợp lệ
     });
 
     const savedUser = await newUser.save();
@@ -148,6 +172,9 @@ const registerService = async ({
 
     await savedUser.save(); 
 
+    // Chuyển các ObjectId thành đối tượng có $oid cho hobbies
+    const hobbyWithOid = savedUser.hobbies.map(hobbyId => ({ "$oid": hobbyId.toString() }));
+
     return {
       success: true,
       data: {
@@ -159,7 +186,7 @@ const registerService = async ({
           userName,
           avt: avtPhoto ? avtPhoto.link : null,
           backGround: backGroundPhoto ? backGroundPhoto.link : null,
-          hobbies
+          hobbies: hobbyWithOid  // Trả lại hobbies dưới dạng [{ "$oid": "id1" }, { "$oid": "id2" }, ...]
         }
       }
     };
@@ -172,6 +199,7 @@ const registerService = async ({
     };
   }
 };
+
 
 const loginService = async (email, password) => {
   try {
