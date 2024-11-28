@@ -43,7 +43,7 @@ const userSchema = new mongoose.Schema({
   follow: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
   backGround: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MyPhoto' }],
   aboutMe: String,
-  hobbies: [String],
+  hobbies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Hobby' }],
   listArticle: [String],
   setting: {
     profileVisibility: { type: String, enum: ['public', 'friends', 'private'], default: 'public' }, 
