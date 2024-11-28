@@ -155,7 +155,7 @@ const createGroupArticle = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin bài viết hoặc người dùng.' });
     }
 
-    if (checkBadWords(content)) {
+    if (checkBadWords(content).found) {
       return res.status(400).json({
         message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
       });

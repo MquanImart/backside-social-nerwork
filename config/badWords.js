@@ -437,6 +437,7 @@ const blackList = [
 	"chetme",
 	"chet me",
 	"chết mẹ",
+	"chết mẹ",
 	"chết mịa",
 	"chết mja",
 	"chết mịe",

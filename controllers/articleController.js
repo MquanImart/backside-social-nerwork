@@ -28,11 +28,12 @@ const createArticle = async (req, res) => {
   try {
     const { content, scope, hashTag, userId } = req.body;
 
-    if (checkBadWords(content)) {
+    if (checkBadWords(content).found) {
       return res.status(400).json({
         message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi đăng.',
       });
     }
+    
 
     // Nếu có file thì upload, nếu không thì listPhoto sẽ là một mảng rỗng
     const listPhoto = req.files?.length > 0
