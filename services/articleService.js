@@ -167,11 +167,11 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
           .map(friend => friend?.idUser?._id && new mongoose.Types.ObjectId(friend.idUser._id))
           .filter(Boolean)
       : [];
-
+    console.log('friendIds', friendIds)
     // Lấy danh sách các nhóm mà người dùng tham gia
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
-      'members.listUsers.state': 'accepted' // Trạng thái đã chấp nhận
+      'members.listUsers.state': 'accepted' 
     });
     const groupIds = groups.map(group => group._id);
 
@@ -187,9 +187,17 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
         {
           $or: [
             { createdBy: userObjectId }, // Bài viết của bản thân
-            { createdBy: { $in: friendIds }, scope: { $in: ['public', 'friends'] }, groupID: { $exists: false } }, // Bài viết của bạn bè (công khai hoặc riêng tư với bạn bè)
+            { 
+              createdBy: { $in: friendIds }, 
+              scope: { $in: ['public', 'friends'] }, 
+              groupID: { $in: [null, undefined] }  // Không thuộc nhóm nào
+            },
             { groupID: { $in: groupIds }, state: 'processed' }, // Bài viết của nhóm (trạng thái 'processed')
-            { createdBy: { $in: followingUserIds }, scope: 'public', groupID: { $exists: false } } // Bài viết của những người đang theo dõi (chỉ công khai)
+            { 
+              createdBy: { $in: followingUserIds }, 
+              scope: 'public', 
+              groupID: { $in: [null, undefined] }
+            } // Bài viết của những người đang theo dõi (chỉ công khai)
           ]
         }
       ]
@@ -263,8 +271,6 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     throw new Error('Lỗi khi lấy bài viết.');
   }
 };
-
-
 
 // Service xóa bài viết
 const deleteArticleService = async (articleId) => {
@@ -1018,8 +1024,6 @@ const getAllArticlesByUserService = async (userId, profileId) => {
     })
     .exec();
 };
-
-
 
 const getAllArticlesWithCommentsSystemWideService = async (page = 1, limit = 10) => {
   try {

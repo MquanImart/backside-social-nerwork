@@ -53,8 +53,7 @@ const getSuggestAddFriend= async (userId, page) => {
           status: 'pending' 
         }).select('receiverId');
         
-        
-
+      
         const senders = sentFriendRequests.map(friend => friend.senderId.toString());
         const receivers = receivedFriendRequests.map(friend => friend.receiverId.toString());
 
@@ -116,12 +115,6 @@ const addFriend = async (senderId, receiverId) => {
         const newNotification = new Notification({
           senderId: senderId,
           receiverId: receiverId,
-          avt: [
-            {
-              _id: avtLink ? avtLink._id : '', 
-              link: avtLink ? avtLink.link : '' 
-            }
-          ],
           message: notificationMessage,
           status: 'unread',
           createdAt: new Date(),
@@ -129,23 +122,25 @@ const addFriend = async (senderId, receiverId) => {
         });
 
         await newNotification.save();
-
+        console.log('avtLink.link', avtLink.link)
         // Phát sự kiện thông báo nếu có
         emitEvent('friend_request_notification', {
           senderId: senderId,
-          receiverId: receiverId,
-          avt: [
-            {
-              _id: avtLink ? avtLink._id : '',
-              link: avtLink ? avtLink.link : ''
-            }
-          ],
+          receiverId: {
+            _id: receiverId,
+            avt: [
+              {
+                _id: avtLink ? avtLink._id : '',
+                link: avtLink ? avtLink.link : ''
+              }
+            ],
+            displayName: receiver.displayName,
+          },
           message: notificationMessage,
           status: 'unread',
           createdAt: new Date(),
           link: link,
         });
-
         return true;
     } catch (error) {
         throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
