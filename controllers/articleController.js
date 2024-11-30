@@ -421,19 +421,26 @@ const likeReplyComment = async (req, res) => {
 
 const getAllArticlesOfUser = async (req, res) => {
   try {
-    const userId = req.params.userId || req.user._id // Lấy userId từ params hoặc xác thực
-    if (!userId) {
-      return res.status(400).json({ message: 'Thiếu userId' })
+    const { userId } = req.params; // Lấy userId từ params
+    const { profileId } = req.query; // Lấy profileId từ query params
+
+    if (!userId || !profileId) {
+      return res.status(400).json({ message: 'Thiếu userId hoặc profileId' });
     }
 
-    // Gọi service để lấy tất cả bài viết của người dùng
-    const articles = await articleService.getAllArticlesByUserService(userId)
-    res.status(200).json(articles)
+    // Gọi service để lấy tất cả bài viết của người dùng theo userId và profileId
+    const articles = await articleService.getAllArticlesByUserService(userId, profileId);
+
+    if (!articles || articles.length === 0) {
+      return res.status(200).json({ message: 'Không có bài viết nào', data: articles });
+    }
+
+    return res.status(200).json(articles);  // Trả về danh sách bài viết
   } catch (error) {
-    console.error('Lỗi khi lấy tất cả bài viết của người dùng:', error)
-    res.status(500).json({ message: 'Lỗi server', error: error.message })
+    console.error('Lỗi khi lấy tất cả bài viết của người dùng:', error);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
-}
+};
 
 const getAllArticlesWithCommentsSystemWide = async (req, res) => {
   try {

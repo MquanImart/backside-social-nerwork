@@ -161,28 +161,35 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
 
     if (!user) throw new Error('Người dùng không tồn tại');
 
+    // Lấy danh sách ID của bạn bè
     const friendIds = user.friends
       ? user.friends
           .map(friend => friend?.idUser?._id && new mongoose.Types.ObjectId(friend.idUser._id))
           .filter(Boolean)
       : [];
 
+    // Lấy danh sách các nhóm mà người dùng tham gia
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
-      'members.listUsers.state': 'processed'
+      'members.listUsers.state': 'accepted' // Trạng thái đã chấp nhận
     });
     const groupIds = groups.map(group => group._id);
 
+    // Lấy danh sách những người mà người dùng theo dõi
+    const followingUserIds = user.follow || [];
+
     const skip = (page - 1) * limit;
 
+    // Lấy bài viết của bản thân, bài viết của bạn bè, bài viết của nhóm (trạng thái 'processed') và bài viết của những người theo dõi
     const articles = await Article.find({
       $and: [
-        { _destroy: { $exists: false } },
+        { _destroy: { $exists: false } }, // Lọc bài viết chưa có _destroy
         {
           $or: [
-            { createdBy: { $in: friendIds }, scope: { $in: ['public', 'friends'] } },
-            { groupID: { $in: groupIds }, state: 'processed' },
-            { createdBy: userObjectId }
+            { createdBy: userObjectId }, // Bài viết của bản thân
+            { createdBy: { $in: friendIds }, scope: { $in: ['public', 'friends'] }, groupID: { $exists: false } }, // Bài viết của bạn bè (công khai hoặc riêng tư với bạn bè)
+            { groupID: { $in: groupIds }, state: 'processed' }, // Bài viết của nhóm (trạng thái 'processed')
+            { createdBy: { $in: followingUserIds }, scope: 'public', groupID: { $exists: false } } // Bài viết của những người đang theo dõi (chỉ công khai)
           ]
         }
       ]
@@ -242,7 +249,7 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
         model: 'MyPhoto',
         select: 'name link idAuthor type'
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 }); // Sắp xếp bài viết theo thời gian tạo giảm dần
 
     if (!articles || articles.length === 0) {
       return { articles: [], hasMore: false };
@@ -256,6 +263,8 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     throw new Error('Lỗi khi lấy bài viết.');
   }
 };
+
+
 
 // Service xóa bài viết
 const deleteArticleService = async (articleId) => {
@@ -892,12 +901,84 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
 };
 
 
-const getAllArticlesByUserService = async (userId) => {
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new Error('ID người dùng không hợp lệ.')
+const getAllArticlesByUserService = async (userId, profileId) => {
+  // Kiểm tra tính hợp lệ của userId và profileId
+  if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(profileId)) {
+    throw new Error('ID người dùng hoặc profileId không hợp lệ.');
   }
 
-  const articles = await Article.find({ createdBy: userId })
+  // Trường hợp 1: Nếu userId và profileId giống nhau, lấy tất cả bài viết của người dùng
+  if (userId === profileId) {
+    return await Article.find({ createdBy: userId, groupID: null, _destroy: { $exists: false } })
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName displayName avt',
+        populate: {
+          path: 'avt',
+          model: 'MyPhoto',
+          select: 'name link idAuthor type'
+        }
+      })
+      .populate({
+        path: 'interact.comment',
+        model: 'Comment',
+        populate: [
+          {
+            path: '_iduser',
+            select: 'firstName lastName displayName avt',
+            populate: {
+              path: 'avt',
+              model: 'MyPhoto',
+              select: 'name link idAuthor type'
+            }
+          },
+          {
+            path: 'replyComment',
+            model: 'Comment',
+            populate: {
+              path: '_iduser',
+              select: 'firstName lastName displayName avt',
+              populate: {
+                path: 'avt',
+                model: 'MyPhoto',
+                select: 'name link idAuthor type'
+              }
+            }
+          }
+        ]
+      })
+      .exec();
+  }
+
+  // Trường hợp 2: Nếu userId khác profileId, kiểm tra bạn bè
+  const user = await User.findById(userId).populate('friends.idUser');
+  
+  // Kiểm tra các mối quan hệ bạn bè
+  console.log('User friends:', user.friends); // Log danh sách bạn bè của người dùng
+
+  const isFriend = user.friends.some(friend => {
+    console.log('Checking friend:', friend.idUser._id.toString(), 'against profileId:', profileId.toString());
+    return friend.idUser._id.equals(profileId);
+  });
+  console.log('isFriend:', isFriend);
+  
+
+  console.log('isFriend:', isFriend); // Log kết quả kiểm tra bạn bè
+
+  let scopeFilter = { _destroy: { $exists: false }, groupID: null }; // Không lấy bài viết đã bị xóa và không thuộc nhóm
+
+  // Nếu là bạn bè, lấy bài viết có trạng thái 'public' hoặc 'friends'
+  if (isFriend) {
+    console.log('User and profile are friends, fetching articles with scope: public or friends');
+    scopeFilter.scope = { $in: ['public', 'friends'] };
+  } else {
+    // Nếu không phải bạn bè, chỉ lấy bài viết có trạng thái 'public'
+    console.log('User and profile are not friends, fetching articles with scope: public');
+    scopeFilter.scope = 'public';
+  }
+
+  // Tìm tất cả bài viết của profileId với điều kiện scopeFilter
+  return await Article.find({ createdBy: profileId, ...scopeFilter })
     .populate({
       path: 'createdBy',
       select: 'firstName lastName displayName avt',
@@ -935,19 +1016,10 @@ const getAllArticlesByUserService = async (userId) => {
         }
       ]
     })
-    .exec()
+    .exec();
+};
 
-  const articlesWithCounts = articles.map((article) => {
-    if (!article) return null
-    return {
-      ...article.toObject(),
-      totalLikes: article.totalLikes,
-      totalComments: article.totalComments
-    }
-  })
 
-  return articlesWithCounts
-}
 
 const getAllArticlesWithCommentsSystemWideService = async (page = 1, limit = 10) => {
   try {
