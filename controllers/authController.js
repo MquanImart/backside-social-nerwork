@@ -1,16 +1,11 @@
 import { authService } from '../services/authService.js'
 import { cloudStorageService } from '../services/cloudStorageService.js';
-import User from '../models/User.js';
-import PasswordResetToken from '../models/passwordResetToken.js';
-import { env } from '../config/environtment.js';
-import bcrypt from 'bcryptjs'
-import transporter from '../config/emailConfig.js'
 
 // Controller xử lý đăng ký
 const registerUser = async (req, res) => {
   try {
     console.log("Dữ liệu yêu cầu:", req.body);
-    
+
     const {
       firstName,
       lastName,
@@ -23,26 +18,23 @@ const registerUser = async (req, res) => {
       hobbies
     } = req.body;
 
-    // Kiểm tra các file
     const avtFile = req.files?.avt ? req.files.avt[0] : null;
     const backGroundFile = req.files?.backGround ? req.files.backGround[0] : null;
     const cccdFile = req.files?.cccd ? req.files.cccd[0] : null;
 
-    console.log("Các tệp tải lên:", { avtFile, backGroundFile, cccdFile });
-
+    // Kiểm tra ảnh CCCD
     if (!cccdFile) {
       console.log("Thiếu ảnh CCCD.");
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp ảnh CCCD.' });
     }
 
-    // Kiểm tra CCCD
+    // Gọi dịch vụ checkCCCD để lấy thông tin từ CCCD
     const { success: cccdSuccess, message: cccdMessage, birthDate, age } = await authService.checkCCCDService(cccdFile);
-    console.log("Kết quả kiểm tra CCCD:", { cccdSuccess, cccdMessage, birthDate, age });
-
     if (!cccdSuccess) {
       return res.status(400).json({ success: false, message: cccdMessage });
     }
 
+    // Kiểm tra tuổi
     if (age < 18) {
       console.log("Tuổi không đủ 18:", age);
       return res.status(400).json({ success: false, message: 'Bạn chưa đủ 18 tuổi để đăng ký.' });
@@ -56,7 +48,7 @@ const registerUser = async (req, res) => {
       phoneNumber,
       address,
       gender,
-      birthDate,
+      birthDate,  // Gán ngày sinh từ CCCD
       userName,
       avtFile,
       backGroundFile,
@@ -74,9 +66,11 @@ const registerUser = async (req, res) => {
 
     const userId = registerResult.data.user.id;
 
+    // Upload ảnh CCCD và gán vào URL
     const cccdUrl = await cloudStorageService.uploadImageUserToStorage(cccdFile, userId, 'cccd');
     console.log("URL CCCD:", cccdUrl);
 
+    // Trả về thông tin người dùng đăng ký thành công
     return res.status(201).json({
       success: true,
       message: 'Tạo tài khoản thành công!',
@@ -92,6 +86,7 @@ const registerUser = async (req, res) => {
     });
   }
 };
+
 // Controller xử lý đăng nhập
 const login = async (req, res) => {
   const { email, password } = req.body

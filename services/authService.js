@@ -6,20 +6,22 @@ import { cloudStorageService } from './cloudStorageService.js'
 import { env } from '../config/environtment.js'
 import axios from 'axios'
 import FormData from 'form-data'
+import mongoose from 'mongoose'
 import MyPhoto from '../models/MyPhoto.js'
 import { Readable } from 'stream'
-import mongoose from 'mongoose';
+import Hobby from '../models/Hobby.js'
 import {emitEvent} from '../sockets/socket.js'
 import PasswordResetToken from '../models/passwordResetToken.js'
 import transporter from '../config/emailConfig.js'
 // Convert buffer to readable stream
+
 const bufferToStream = (buffer) => {
   const readable = new Readable()
   readable.push(buffer)
   readable.push(null)
   return readable
 }
-// Calculate age based on birthDate
+
 const calculateAge = (birthDate) => {
   const today = new Date()
   const birth = new Date(birthDate)
@@ -30,6 +32,7 @@ const calculateAge = (birthDate) => {
   }
   return age
 }
+
 function parseDate(inputDate) {
   const [day, month, year] = inputDate.split('/');
   return new Date(`${year}-${month}-${day}`);
@@ -83,10 +86,6 @@ const checkCCCDService = async (cccdFile) => {
 
     return { success: true, birthDate, name, sex, age }
   } catch (error) {
-    console.error(
-      'API Error:',
-      error.response ? error.response.data : error.message
-    )
     return {
       success: false,
       message: 'Lỗi khi gọi API FPT.AI.',
@@ -95,7 +94,6 @@ const checkCCCDService = async (cccdFile) => {
   }
 }
 
-// Service for user registration
 const registerService = async ({
   firstName,
   lastName,
@@ -126,36 +124,59 @@ const registerService = async ({
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     const newDate = parseDate(birthDate);
+
+    // Kiểm tra và xử lý hobbies
+    let hobbyIds = [];
+    if (hobbies) {
+      // Tách chuỗi ID thành mảng nếu là chuỗi
+      if (typeof hobbies === 'string') {
+        hobbyIds = hobbies.split(',').map(hobbyId => new mongoose.Types.ObjectId(hobbyId));  // Sử dụng new mongoose.Types.ObjectId()
+      } else if (Array.isArray(hobbies)) {
+        hobbyIds = hobbies.map(hobbyId => new mongoose.Types.ObjectId(hobbyId));  // Sử dụng new mongoose.Types.ObjectId()
+      }
+
+      // Kiểm tra xem các ID này có tồn tại trong bảng Hobby không
+      const foundHobbies = await Hobby.find({ _id: { $in: hobbyIds } });
+      if (foundHobbies.length !== hobbyIds.length) {
+        return {
+          success: false,
+          message: 'Một hoặc nhiều sở thích không hợp lệ.'
+        };
+      }
+    }
+
     const newUser = new User({
       account: { email, password: hashedPassword },
       firstName,
       lastName,
       userName,
-      details: { phoneNumber, address, gender: genderBoolean, newDate },
-      hobbies
+      details: { phoneNumber, address, gender: genderBoolean, birthDate: newDate },
+      hobbies: hobbyIds // Lưu danh sách ID của sở thích hợp lệ
     });
 
-    const savedUser = await newUser.save(); // Lưu user mà không dùng transaction
+    const savedUser = await newUser.save();
     const userId = savedUser._id.toString();
 
-    // Upload avatar và background, sau đó lưu ObjectId của MyPhoto
     let avtPhoto, backGroundPhoto;
 
     if (avtFile) {
       const avtLink = await cloudStorageService.uploadImageUserToStorage(avtFile, userId, 'avatar');
       avtPhoto = new MyPhoto({ name: avtFile.originalname, idAuthor: userId, type: 'img', link: avtLink });
-      await avtPhoto.save(); // Lưu avt mà không dùng transaction
+      await avtPhoto.save();
       savedUser.avt = [avtPhoto._id];
     }
 
     if (backGroundFile) {
       const backGroundLink = await cloudStorageService.uploadImageUserToStorage(backGroundFile, userId, 'background');
       backGroundPhoto = new MyPhoto({ name: backGroundFile.originalname, idAuthor: userId, type: 'img', link: backGroundLink });
-      await backGroundPhoto.save(); // Lưu background mà không dùng transaction
+      await backGroundPhoto.save(); 
       savedUser.backGround = [backGroundPhoto._id];
     }
 
-    await savedUser.save(); // Cập nhật avatar và background mà không dùng transaction
+    await savedUser.save(); 
+
+    // Chuyển các ObjectId thành đối tượng có $oid cho hobbies
+    const hobbyWithOid = savedUser.hobbies.map(hobbyId => ({ "$oid": hobbyId.toString() }));
 
     return {
       success: true,
@@ -168,7 +189,7 @@ const registerService = async ({
           userName,
           avt: avtPhoto ? avtPhoto.link : null,
           backGround: backGroundPhoto ? backGroundPhoto.link : null,
-          hobbies
+          hobbies: hobbyWithOid  // Trả lại hobbies dưới dạng [{ "$oid": "id1" }, { "$oid": "id2" }, ...]
         }
       }
     };
@@ -183,8 +204,6 @@ const registerService = async ({
 };
 
 
-
-// Service xử lý logic đăng nhập
 const loginService = async (email, password) => {
   try {
     const user = await User.findOne({ 'account.email': email })
@@ -199,7 +218,7 @@ const loginService = async (email, password) => {
     if (!isMatch) {
       return { success: false, message: 'Email hoặc mật khẩu không đúng.' }
     }
-    //Cập nhật trạng thái online
+
     await User.findByIdAndUpdate(user._id, { status: 'online' });
 
     const token = jwt.sign(
@@ -207,7 +226,7 @@ const loginService = async (email, password) => {
       env.JWT_SECRET,
       { expiresIn: '2h' }
     )
-    //socket online
+
     emitEvent(`status-user-${user._id}`, {
       _id: user._id,
       status: "online"
@@ -344,6 +363,7 @@ const registerAdminService = async ({ email, password }) => {
     }
   }
 }
+
 const logoutAdminService = async (req) => {
   try {
     // Xóa cookie token nếu nó tồn tại
