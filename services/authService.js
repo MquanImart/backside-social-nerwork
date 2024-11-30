@@ -10,7 +10,8 @@ import MyPhoto from '../models/MyPhoto.js'
 import { Readable } from 'stream'
 import mongoose from 'mongoose';
 import {emitEvent} from '../sockets/socket.js'
-
+import PasswordResetToken from '../models/passwordResetToken.js'
+import transporter from '../config/emailConfig.js'
 // Convert buffer to readable stream
 const bufferToStream = (buffer) => {
   const readable = new Readable()
