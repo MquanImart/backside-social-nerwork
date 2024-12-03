@@ -7,6 +7,7 @@ import Admin from '../models/Admin.js'
 import Group from '../models/Group.js'
 import { emitEvent } from '../sockets/socket.js'
 import mongoose from 'mongoose'
+import cosineSimilarity from 'compute-cosine-similarity';
 
 const getArticleByIdService = async (articleId) => {
   try {
@@ -146,6 +147,22 @@ const createArticleService = async ({
   }
 };
 
+const getHobbySimilarity = (userHobbies, groupHobbies) => {
+  if (!userHobbies || !groupHobbies || userHobbies.length === 0 || groupHobbies.length === 0) {
+    return 0; // Nếu một trong hai danh sách trống, độ tương đồng là 0
+  }
+
+  // Hợp nhất tất cả các sở thích thành một tập hợp duy nhất
+  const allHobbies = [...new Set([...userHobbies, ...groupHobbies])];
+
+  // Biểu diễn userHobbies và groupHobbies dưới dạng vector
+  const userVector = allHobbies.map(hobby => (userHobbies.includes(hobby) ? 1 : 0));
+  const groupVector = allHobbies.map(hobby => (groupHobbies.includes(hobby) ? 1 : 0));
+
+  // Tính cosine similarity giữa userVector và groupVector
+  return cosineSimilarity(userVector, groupVector);
+};
+
 const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -159,6 +176,17 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
       path: 'friends',
       populate: { path: 'idUser', select: '_id' }
     });
+
+    const userHobbies = user.hobbies || [];
+    const allUsers = await User.find({ _id: { $ne: userObjectId } }).lean();
+    const similarUsers = allUsers.filter((otherUser) => {
+      const otherUserHobbies = otherUser.hobbies || [];
+      const similarity = getHobbySimilarity(userHobbies, otherUserHobbies);
+      return similarity >= 0.7; // Lọc những người có độ tương thích >= 0.7
+    });
+
+    const similarUserIds = similarUsers.map((user) => user._id);
+    console.log('Similar User IDs:', similarUserIds);
 
     if (!user) throw new Error('Người dùng không tồn tại');
 
@@ -200,6 +228,10 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
           $or: [
             { 
               createdBy: userObjectId,
+              groupID: { $in: [null, undefined] }
+            }, // Bài viết của bản thân
+            { 
+              createdBy: { $in: similarUserIds },
               groupID: { $in: [null, undefined] }
             }, // Bài viết của bản thân
             { 

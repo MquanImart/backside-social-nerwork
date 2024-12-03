@@ -51,7 +51,7 @@ const groupSchema = new mongoose.Schema({
       joinDate: { type: Date, default: Date.now },
     },
   ],
-  hobbies: [String],
+  hobbies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Hobby' }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date,
   _destroy: Date,

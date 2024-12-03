@@ -7,6 +7,7 @@ import MyPhoto from '../models/MyPhoto.js'
 import Admin from '../models/Admin.js'
 import { emitEvent } from '../sockets/socket.js'
 import { cloudStorageService } from './cloudStorageService.js'
+import cosineSimilarity from 'compute-cosine-similarity';
 
 const getUserGroupsService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -122,12 +123,48 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
 };
 
 
+const getHobbySimilarity = (userHobbies, groupHobbies) => {
+  if (!userHobbies || !groupHobbies || userHobbies.length === 0 || groupHobbies.length === 0) {
+    return 0; // Nếu một trong hai danh sách trống, độ tương đồng là 0
+  }
+
+  // Hợp nhất tất cả các sở thích thành một tập hợp duy nhất
+  const allHobbies = [...new Set([...userHobbies, ...groupHobbies])];
+
+  // Biểu diễn userHobbies và groupHobbies dưới dạng vector
+  const userVector = allHobbies.map(hobby => (userHobbies.includes(hobby) ? 1 : 0));
+  const groupVector = allHobbies.map(hobby => (groupHobbies.includes(hobby) ? 1 : 0));
+
+  // Tính cosine similarity giữa userVector và groupVector
+  return cosineSimilarity(userVector, groupVector);
+};
+
+const getFriendCountInGroup = (group, userId) => {
+  if (!group || !group.members || !group.members.listUsers) return 0;
+
+  // Lọc những người bạn tham gia nhóm
+  const friendCount = group.members.listUsers.filter(member => {
+    return member.idUser.toString() !== userId && 
+           member.state === 'accepted' && 
+           member.idUser.toString() !== userId;
+  }).length;
+
+  return friendCount;
+};
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new Error('ID người dùng không hợp lệ.');
     }
+
+    // Lấy thông tin người dùng (bao gồm sở thích và bạn bè)
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      throw new Error('Không tìm thấy người dùng.');
+    }
+
+    const userHobbies = user.hobbies ? user.hobbies.map(hobby => hobby.name) : [];
 
     // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
     const groups = await Group.find({
@@ -155,15 +192,35 @@ const getNotJoinedGroupsService = async (userId) => {
 
     // Thêm trường userState cho biết trạng thái tham gia của người dùng trong nhóm
     const groupsWithUserState = groups.map((group) => {
-      const userState =
-        group.members.listUsers.find(
-          (member) => member.idUser.toString() === userId
-        )?.state || 'not_joined';
+      const userState = group.members.listUsers.find(
+        (member) => member.idUser.toString() === userId
+      )?.state || 'not_joined';
 
       return { ...group, userState };
     });
 
-    return groupsWithUserState;
+    // Tính toán độ tương đồng giữa sở thích người dùng và sở thích nhóm, đồng thời tính số lượng bạn bè đã tham gia nhóm
+    const groupsWithSimilarityAndFriends = groupsWithUserState.map((group) => {
+      const groupHobbies = group.hobbies ? group.hobbies.map(hobby => hobby.name) : [];
+      const hobbySimilarity = getHobbySimilarity(userHobbies, groupHobbies); // Độ tương đồng sở thích
+      const friendCount = getFriendCountInGroup(group, userId); // Số lượng bạn bè tham gia nhóm
+
+      // Bạn có thể kết hợp cả 2 yếu tố này để tạo ra điểm gợi ý
+      const suggestionScore = hobbySimilarity + (friendCount * 0.05); // Thêm trọng số cho số bạn bè tham gia
+
+      return {
+        ...group,
+        hobbySimilarity,
+        friendCount,
+        suggestionScore,
+      };
+    });
+
+    // Sắp xếp các nhóm theo điểm gợi ý giảm dần (có thể dùng điểm suggestionScore để lọc nhóm gợi ý)
+    const sortedGroups = groupsWithSimilarityAndFriends.sort((a, b) => b.suggestionScore - a.suggestionScore);
+
+    return sortedGroups;
+
   } catch (error) {
     console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error);
     throw new Error('Không thể lấy danh sách nhóm chưa tham gia.');
