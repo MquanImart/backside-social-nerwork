@@ -4,6 +4,7 @@ import User from '../models/User.js'
 import Notification from '../models/Notification.js'
 import mongoose from 'mongoose'
 import MyPhoto from '../models/MyPhoto.js'
+import Admin from '../models/Admin.js'
 import { emitEvent } from '../sockets/socket.js'
 import { cloudStorageService } from './cloudStorageService.js'
 
@@ -44,6 +45,7 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
       'members.listUsers': {
         $elemMatch: { idUser: userId, state: 'accepted' },
       },
+      _destroy: { $exists: false } 
     }).select('article'); // Chỉ lấy trường 'article'
 
     if (!userGroups || userGroups.length === 0) return [];
@@ -1589,6 +1591,34 @@ const lockGroupService = async (groupId) => {
 
   group._destroy = new Date();
   await group.save();
+
+  const admin = await Admin.findOne();  // Lấy admin hệ thống (có thể lấy dựa trên ID hoặc quyền)
+  if (!admin) {
+    throw new Error('Admin system not found.');
+  }
+  const originalPostLink = `http://localhost:5173/group/your-groups`;
+  // Phát sự kiện thông báo (nếu cần)
+  emitEvent('group_lock_notification', {
+    senderId: admin._id,
+    receiverId: group.idAdmin,
+    message: `Nhóm ${group.groupName} của bạn đã bị lock bởi hệ thống khóa`,
+    status: 'unread',
+    createdAt: new Date(),
+    link: originalPostLink,
+  });
+
+  const newNotification = new Notification({
+    senderId: admin._id,  // ID của admin gửi thông báo
+    receiverId: group.idAdmin,  // ID của quản trị viên nhóm
+    message: `Nhóm ${group.groupName} của bạn đã bị lock bởi hệ thống khóa`,
+    status: 'unread',  // Đặt trạng thái là 'unread'
+    createdAt: new Date(),
+    link: originalPostLink,
+  });
+
+    // Lưu thông báo vào cơ sở dữ liệu
+  await newNotification.save();
+
   return group;
 };
 
@@ -1602,8 +1632,35 @@ const unlockGroupService = async (groupId) => {
       throw new Error('Group is not locked.');
   }
 
-  group._destroy = null; // Set _destroy to null to unlock the group
+  group._destroy = undefined; // Set _destroy to null to unlock the group
   await group.save();
+  
+  const admin = await Admin.findOne();  // Lấy admin hệ thống (có thể lấy dựa trên ID hoặc quyền)
+  if (!admin) {
+    throw new Error('Admin system not found.');
+  }
+  const originalPostLink = `http://localhost:5173/group/${group._id}`;
+  // Phát sự kiện thông báo (nếu cần)
+  emitEvent('group_lock_unlock_notification', {
+    senderId: admin._id,
+    receiverId: group.idAdmin,
+    message: `Nhóm ${group.groupName} của bạn đã được mở lock bởi hệ thống khóa`,
+    status: 'unread',
+    createdAt: new Date(),
+    link: originalPostLink,
+  });
+
+  const newNotification = new Notification({
+    senderId: admin._id,  // ID của admin gửi thông báo
+    receiverId: group.idAdmin,  // ID của quản trị viên nhóm
+    message: `Nhóm ${group.groupName} của bạn đã được mở lock bởi hệ thống khóa`,
+    status: 'unread',  // Đặt trạng thái là 'unread'
+    createdAt: new Date(),
+    link: originalPostLink,
+  });
+
+    // Lưu thông báo vào cơ sở dữ liệu
+  await newNotification.save();
 
   return group;
 };

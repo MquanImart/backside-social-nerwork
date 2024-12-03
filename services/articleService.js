@@ -3,6 +3,7 @@ import Comment from '../models/Comment.js'
 import MyPhoto from '../models/MyPhoto.js'
 import Notification from '../models/Notification.js'
 import User from '../models/User.js'
+import Admin from '../models/Admin.js'
 import Group from '../models/Group.js'
 import { emitEvent } from '../sockets/socket.js'
 import mongoose from 'mongoose'
@@ -171,9 +172,20 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     // Lấy danh sách các nhóm mà người dùng tham gia
     const groups = await Group.find({
       'members.listUsers.idUser': userObjectId,
-      'members.listUsers.state': 'accepted' 
+      'members.listUsers.state': 'accepted',
+      _destroy: { $exists: false }
     });
     const groupIds = groups.map(group => group._id);
+
+    const groupArticles = groups.reduce((acc, group) => {
+      const processedArticles = group.article?.listArticle?.filter(
+        (article) => article.state === 'processed'
+      );
+      if (processedArticles) {
+        acc.push(...processedArticles.map(a => a.idArticle));
+      }
+      return acc;
+    }, []);
 
     // Lấy danh sách những người mà người dùng theo dõi
     const followingUserIds = user.follow || [];
@@ -186,13 +198,16 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
         { _destroy: { $exists: false } }, // Lọc bài viết chưa có _destroy
         {
           $or: [
-            { createdBy: userObjectId }, // Bài viết của bản thân
+            { 
+              createdBy: userObjectId,
+              groupID: { $in: [null, undefined] }
+            }, // Bài viết của bản thân
             { 
               createdBy: { $in: friendIds }, 
               scope: { $in: ['public', 'friends'] }, 
               groupID: { $in: [null, undefined] }  // Không thuộc nhóm nào
             },
-            { groupID: { $in: groupIds }, state: 'processed' }, // Bài viết của nhóm (trạng thái 'processed')
+            { groupID: { $in: groupIds }, _id: { $in: groupArticles } },
             { 
               createdBy: { $in: followingUserIds }, 
               scope: 'public', 
@@ -299,6 +314,15 @@ const deleteArticleService = async (articleId) => {
     article._destroy = new Date();
     await article.save();
 
+    if (article.groupID) {
+      const group = await Group.findById(article.groupID);
+      if (group) {
+        group.article.count -= 1;  // Giảm số lượng bài viết trong nhóm
+        if (group.article.count < 0) group.article.count = 0;  // Đảm bảo không giảm dưới 0
+        await group.save();  // Lưu thay đổi trong nhóm
+      }
+    }
+    
     // Xóa bài viết khỏi danh sách bài viết của người dùng
     await User.findByIdAndUpdate(
       article.createdBy,
@@ -1030,7 +1054,6 @@ const getAllArticlesWithCommentsSystemWideService = async (page = 1, limit = 10)
     const skip = (page - 1) * limit;
 
     const articles = await Article.find({
-      _destroy: { $exists: false }, // Exclude deleted articles
     })
       .skip(skip)
       .limit(limit)
@@ -1136,8 +1159,8 @@ const approveReportService = async (reportId) => {
   await user.save();
 
   // Handle group warnings if the article is associated with a group
-  if (article.groupId) {
-      const group = await Group.findById(article.groupId);
+  if (article.groupID) {
+      const group = await Group.findById(article.groupID);
       if (group) {
           // Increment the group's warning level
           group.warningLevel += 1;
@@ -1145,11 +1168,40 @@ const approveReportService = async (reportId) => {
           // Delete the group if its warning level reaches 3
           if (group.warningLevel >= 3) {
               await Group.findByIdAndUpdate(article.groupId, { _destroy: new Date() });
-          } else {
+          } 
+          else {
               await group.save();
           }
+          group.article.count -= 1;
+          await group.save();
       }
   }
+
+  const admin = await Admin.findOne();  // Lấy admin hệ thống (có thể lấy dựa trên ID hoặc quyền)
+  if (!admin) {
+    throw new Error('Admin system not found');
+  }
+  // Phát sự kiện thông báo (nếu cần)
+  emitEvent('approve_report_notification', {
+    senderId: admin._id,
+    receiverId: user._id,  // ID của quản trị viên nhóm
+    message: `Bài viết với nội dung ${article.content} của bạn đã bị do vi phạm
+     quy tắc cộng đồng và mức độ cảnh báo của bạn ${user.account.warningLevel}`,
+    status: 'unread',
+    createdAt: new Date()
+  });
+
+  const newNotification = new Notification({
+    senderId: admin._id,  // ID của admin gửi thông báo
+    receiverId: user._id,  // ID của quản trị viên nhóm
+    message: `Bài viết với nội dung ${article.content} của bạn đã bị do vi phạm
+     quy tắc cộng đồng và mức độ cảnh báo của bạn ${user.account.warningLevel}`,
+    status: 'unread',  // Đặt trạng thái là 'unread'
+    createdAt: new Date()
+  });
+
+    // Lưu thông báo vào cơ sở dữ liệu
+  await newNotification.save();
 
   // Mark the article as deleted by updating the `_destroy` field
   article._destroy = new Date();

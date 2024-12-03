@@ -57,6 +57,7 @@ const groupSchema = new mongoose.Schema({
   _destroy: Date,
 });
 
+
 const Group = mongoose.model('Group', groupSchema);
 
 export default Group;
