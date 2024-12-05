@@ -2,8 +2,9 @@ import { friendService } from "../services/friendService.js";
 
 const getAllFriendByIdUser = async (req, res) => {
     const userID = req.params.UserId;
+    const {page, limit} = req.query;
     try {
-      const result = await friendService.getAllFriendByIdUser(userID);
+      const result = await friendService.getAllFriendByIdUser(userID, page, limit);
       res.status(200).json(result);
 
     } catch (error) {
