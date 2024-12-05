@@ -54,9 +54,6 @@ const getUserGroupsService = async (userId, page = 1, limit = 6, search = '') =>
 
   return { groups: userGroups, totalPages, totalGroups };
 };
-
-
-
 // Service lấy tất cả bài viết từ các nhóm mà người dùng đã tham gia và được duyệt
 const getAllGroupArticlesService = async (userId, page, limit) => {
   try {
@@ -157,7 +154,6 @@ const getFriendCountInGroup = (group, userId) => {
 
   return friendCount;
 };
-
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId, page = 1, limit = 3) => {
   try {
@@ -263,9 +259,6 @@ const getNotJoinedGroupsService = async (userId, page = 1, limit = 3) => {
     throw new Error("Lỗi khi lấy nhóm chưa tham gia.");
   }
 };
-
-
-
 // Hàm tạo nhóm mới
 const createGroupService = async ({
   groupName,
@@ -301,7 +294,6 @@ const createGroupService = async ({
   const savedGroup = await newGroup.save();
   return savedGroup;
 };
-
 // Hàm thêm một quản trị viên mới (Administrator) vào nhóm
 const addAdminService = async (groupId, adminId, currentUserId) => {
   if (
@@ -387,7 +379,6 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
   };
 };
 
-
 const getProcessedArticlesService = async (groupId, page, limit) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
@@ -468,7 +459,6 @@ const getProcessedArticlesService = async (groupId, page, limit) => {
     throw new Error('Lỗi khi lấy bài viết đã xử lý của nhóm.');
   }
 };
-
 
 const createArticleService = async ({
   content,
@@ -561,7 +551,6 @@ const getPendingArticlesService = async (groupId) => {
     throw new Error(error.message);
   }
 };
-
 // Cập nhật trạng thái bài viết
 const updateArticleStateService = async (groupId, articleId, newState) => {
   try {
