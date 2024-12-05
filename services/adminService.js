@@ -139,11 +139,18 @@ const lockUnlockUserService = async (userId, action) => {
     if (!user) {
       return { success: false, message: 'User not found.' }
     }
+    
 
     // Cập nhật trạng thái tài khoản
     const newStatus = action === 'lock' ? 'locked' : 'active'
     user.status = newStatus
     user.updatedAt = new Date()
+    if (action === 'lock') {
+      user.account.warningLevel = 3;  // Reset mức cảnh báo khi mở khóa
+    }
+    else {
+      user.account.warningLevel = 0;  // Reset mức cảnh báo khi mở khóa
+    }
 
     // Lưu người dùng sau khi cập nhật
     await user.save()
