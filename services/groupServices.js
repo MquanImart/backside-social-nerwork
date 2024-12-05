@@ -11,15 +11,35 @@ import { cloudStorageService } from './cloudStorageService.js'
 import { getHobbySimilarity } from '../config/cosineSimilarity.js'
 
 
-const getUserGroupsService = async (userId) => {
+const getUserGroupsService = async (userId, page = 1, limit = 6, search = '') => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('ID người dùng không hợp lệ.');
   }
 
+  const skip = (page - 1) * limit;
+
+  const searchFilter = search ? {
+    name: { $regex: search, $options: 'i' } // Tìm kiếm tên nhóm không phân biệt chữ hoa chữ thường
+  } : {};
+
+  // Tính toán tổng số nhóm
+  const totalGroups = await Group.countDocuments({
+    'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } },
+    _destroy: { $exists: false },
+    ...searchFilter,
+  });
+
+  // Tính toán tổng số trang
+  const totalPages = Math.ceil(totalGroups / limit);
+
+  // Lấy các nhóm của người dùng với phân trang
   const userGroups = await Group.find({
     'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } },
-    _destroy: { $exists: false }
+    _destroy: { $exists: false },
+    ...searchFilter,  // Áp dụng điều kiện tìm kiếm
   })
+    .skip(skip)  // Sử dụng skip cho phân trang
+    .limit(limit) // Giới hạn số lượng nhóm trả về
     .populate({
       path: 'avt', // Lấy avatar của nhóm
       model: 'MyPhoto',
@@ -32,8 +52,9 @@ const getUserGroupsService = async (userId) => {
     })
     .lean();
 
-  return userGroups;
+  return { groups: userGroups, totalPages, totalGroups };
 };
+
 
 
 // Service lấy tất cả bài viết từ các nhóm mà người dùng đã tham gia và được duyệt
@@ -138,7 +159,7 @@ const getFriendCountInGroup = (group, userId) => {
 };
 
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
-const getNotJoinedGroupsService = async (userId) => {
+const getNotJoinedGroupsService = async (userId, page = 1, limit = 3) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new Error('ID người dùng không hợp lệ.');
@@ -158,7 +179,7 @@ const getNotJoinedGroupsService = async (userId) => {
     // Lấy tên sở thích của người dùng
     const userHobbiesNames = userHobbies.map(hobby => hobby.name);
     console.log("Sở thích của người dùng:", userHobbiesNames);
-
+    const skip = (page - 1) * limit; 
     // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
     const groups = await Group.find({
       $or: [
@@ -171,6 +192,8 @@ const getNotJoinedGroupsService = async (userId) => {
       ],
       _destroy: { $exists: false }
     })
+    .skip(skip) // Bỏ qua `skip` số nhóm
+    .limit(limit) // Giới hạn số nhóm mỗi trang
     .populate({
       path: 'avt',
       model: 'MyPhoto',
@@ -187,6 +210,22 @@ const getNotJoinedGroupsService = async (userId) => {
       select: 'name' // Chỉ lấy tên sở thích
     })
     .lean();
+
+
+    const totalGroups = await Group.countDocuments({
+      $or: [
+        { 'members.listUsers.idUser': { $ne: userId } },
+        {
+          'members.listUsers': {
+            $elemMatch: { idUser: userId, state: 'pending' }
+          }
+        }
+      ],
+      _destroy: { $exists: false }
+    });
+
+    // Tính số trang
+    const pages = Math.ceil(totalGroups / limit);
 
     // Thêm trường userState cho biết trạng thái tham gia của người dùng trong nhóm
     const groupsWithUserState = groups.map((group) => {
@@ -212,11 +251,13 @@ const getNotJoinedGroupsService = async (userId) => {
         ...group,
         hobbySimilarity,
         friendCount,
-        suggestionScore,
+        suggestionScore
       };
     });
-
-    return groupsWithSimilarityAndFriends;
+    return {
+      groups: groupsWithSimilarityAndFriends,
+      pages, // Tổng số trang
+    };
   } catch (error) {
     console.error("Lỗi khi lấy nhóm chưa tham gia:", error);
     throw new Error("Lỗi khi lấy nhóm chưa tham gia.");

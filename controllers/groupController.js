@@ -7,21 +7,25 @@ import { checkBadWords } from '../config/badWords.js'
 
 const getUserGroups = async (req, res) => {
   try {
-    const userId = req.params.userId
+    const userId = req.params.userId;
+    const { page = 1, limit = 3, search = '' } = req.query; // Lấy tham số phân trang từ query string
 
-    // Gọi service để lấy danh sách nhóm mà người dùng đã tham gia
-    const userGroups = await groupService.getUserGroupsService(userId)
+    // Gọi service để lấy danh sách nhóm mà người dùng đã tham gia với phân trang
+    const { groups, totalPages, totalGroups } = await groupService.getUserGroupsService(userId, page, limit, search);
 
-    // Trả về kết quả
+    // Trả về kết quả với dữ liệu phân trang
     return res.status(200).json({
-      message: `Lấy thành công ${userGroups.length} nhóm`,
-      groups: userGroups
-    })
+      message: `Lấy thành công ${groups.length} nhóm`,
+      groups,
+      totalPages,
+      totalGroups,
+    });
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách nhóm của người dùng:', error.message)
-    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+    console.error('Lỗi khi lấy danh sách nhóm của người dùng:', error.message);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
-}
+};
+
 
 const getAllGroupArticles = async (req, res) => {
   const { userId } = req.params;
@@ -41,14 +45,17 @@ const getAllGroupArticles = async (req, res) => {
 
 const getNotJoinedGroups = async (req, res) => {
   try {
-    const userId = req.params.userId
-    const groups = await groupService.getNotJoinedGroupsService(userId)
-    return res.status(200).json({ groups })
+    const userId = req.params.userId;
+    const { page = 1, limit = 3 } = req.query; // Mặc định trang 1, mỗi trang 3 nhóm
+
+    const groupsData = await groupService.getNotJoinedGroupsService(userId, parseInt(page), parseInt(limit));
+    return res.status(200).json(groupsData);
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error.message)
-    return res.status(500).json({ message: 'Lỗi server', error: error.message })
+    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error.message);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 }
+
 
 const createGroup = async (req, res) => {
   try {
