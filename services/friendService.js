@@ -5,7 +5,7 @@ import AddFriends from '../models/AddFriends.js';
 import MyPhoto from '../models/MyPhoto.js';
 import { emitEvent } from '../sockets/socket.js'
 
-const getAllFriendByIdUser = async (userId) => {
+const getAllFriendByIdUser = async (userId, page = 0, limit = 10) => {
     try {
         
         if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -14,7 +14,7 @@ const getAllFriendByIdUser = async (userId) => {
         const userObjectId = new mongoose.Types.ObjectId(userId);
         const user = await User.findById(userObjectId);
         
-        const resultData = await Promise.all(user.friends.map(async (friend) => {
+        const resultData = await Promise.all(user.friends.slice((page-1)*limit, page*limit).map(async (friend) => {
             const friendData = await User.findById(friend.idUser);
             const avt = await MyPhoto.findById(friendData.avt[user.avt.length - 1]);
             return {         
@@ -26,7 +26,10 @@ const getAllFriendByIdUser = async (userId) => {
             };
         })); 
 
-        return resultData;
+        return {
+          count: user.friends.length,
+          dataFriend: resultData
+        };
     } catch (error) {
         throw new Error('Có lỗi xảy ra xong khi lấy danh sách bạn bè:', error);
     }
