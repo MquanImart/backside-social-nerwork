@@ -5,7 +5,7 @@ import AddFriends from '../models/AddFriends.js';
 import MyPhoto from '../models/MyPhoto.js';
 import { emitEvent } from '../sockets/socket.js'
 
-const getAllFriendByIdUser = async (userId, page = 0, limit = 10) => {
+const getAllFriendByIdUser = async (userId, page, limit) => {
     try {
         
         if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -35,7 +35,7 @@ const getAllFriendByIdUser = async (userId, page = 0, limit = 10) => {
     }
 }
 
-const getSuggestAddFriend= async (userId, page) => {
+const getSuggestAddFriend= async (userId, page, limit) => {
 
     try {
         if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -66,7 +66,7 @@ const getSuggestAddFriend= async (userId, page) => {
           _id: { $nin: allRelatedIds }
         })
         .skip((page - 1) * 10)
-        .limit(10);
+        .limit(limit);
 
         const resultData = await Promise.all(usersNotInFriends.map(async (user) => {
           const avt = await MyPhoto.findById(user.avt[user.avt.length - 1]);
@@ -79,7 +79,10 @@ const getSuggestAddFriend= async (userId, page) => {
             };
         })); 
 
-        return resultData;
+        return {
+          count: resultData.length,
+          dataFriend: resultData
+        };
     } catch (error) {
         throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
     }
@@ -150,7 +153,7 @@ const addFriend = async (senderId, receiverId) => {
     }
 }
 
-const getAllFriendRequest = async (userId, page) => {
+const getAllFriendRequest = async (userId, page, limit) => {
   try {
       if (!mongoose.Types.ObjectId.isValid(userId)) {
           throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
@@ -163,7 +166,7 @@ const getAllFriendRequest = async (userId, page) => {
         status: 'pending'
       })
       .skip((page - 1) * 10)
-      .limit(10);
+      .limit(limit);
       
       const result = await Promise.all(friendRequest.map(async (friendreq) => {
         const friend = await User.findById(friendreq.senderId);
@@ -178,7 +181,10 @@ const getAllFriendRequest = async (userId, page) => {
         };
       })); 
 
-      return result;
+      return {
+        count: result.length,
+        dataFriend: result
+      };
   } catch (error) {
       throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
   }
@@ -296,7 +302,7 @@ const updateSatusFriendRequest = async (requestId, status) => {
 };
 
 
-const getMyRequest = async (userId, page) => {
+const getMyRequest = async (userId, page, limit) => {
   try {
       if (!mongoose.Types.ObjectId.isValid(userId)) {
           throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
@@ -308,7 +314,7 @@ const getMyRequest = async (userId, page) => {
         status: 'pending'
       })
       .skip((page - 1) * 10)
-      .limit(10);
+      .limit(limit);
 
       const resultData = await Promise.all(myRequest.map(async (request) => {
         const user = await User.findById(request.receiverId);
@@ -322,7 +328,10 @@ const getMyRequest = async (userId, page) => {
           };
       })); 
 
-      return resultData;
+      return {
+        count: resultData.length,
+        dataFriend: resultData
+      };
   } catch (error) {
       throw new Error('', error);
   }
