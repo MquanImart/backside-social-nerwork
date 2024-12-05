@@ -6,8 +6,10 @@ import mongoose from 'mongoose'
 import MyPhoto from '../models/MyPhoto.js'
 import Admin from '../models/Admin.js'
 import { emitEvent } from '../sockets/socket.js'
+import Hobby from '../models/Hobby.js'
 import { cloudStorageService } from './cloudStorageService.js'
-import cosineSimilarity from 'compute-cosine-similarity';
+import { getHobbySimilarity } from '../config/cosineSimilarity.js'
+
 
 const getUserGroupsService = async (userId) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -122,23 +124,6 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
   }
 };
 
-
-const getHobbySimilarity = (userHobbies, groupHobbies) => {
-  if (!userHobbies || !groupHobbies || userHobbies.length === 0 || groupHobbies.length === 0) {
-    return 0; // Nếu một trong hai danh sách trống, độ tương đồng là 0
-  }
-
-  // Hợp nhất tất cả các sở thích thành một tập hợp duy nhất
-  const allHobbies = [...new Set([...userHobbies, ...groupHobbies])];
-
-  // Biểu diễn userHobbies và groupHobbies dưới dạng vector
-  const userVector = allHobbies.map(hobby => (userHobbies.includes(hobby) ? 1 : 0));
-  const groupVector = allHobbies.map(hobby => (groupHobbies.includes(hobby) ? 1 : 0));
-
-  // Tính cosine similarity giữa userVector và groupVector
-  return cosineSimilarity(userVector, groupVector);
-};
-
 const getFriendCountInGroup = (group, userId) => {
   if (!group || !group.members || !group.members.listUsers) return 0;
 
@@ -151,6 +136,7 @@ const getFriendCountInGroup = (group, userId) => {
 
   return friendCount;
 };
+
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
 const getNotJoinedGroupsService = async (userId) => {
   try {
@@ -164,7 +150,14 @@ const getNotJoinedGroupsService = async (userId) => {
       throw new Error('Không tìm thấy người dùng.');
     }
 
-    const userHobbies = user.hobbies ? user.hobbies.map(hobby => hobby.name) : [];
+    // Lấy sở thích của người dùng
+    const userHobbies = user.hobbies && user.hobbies.length > 0
+      ? await Hobby.find({ '_id': { $in: user.hobbies } }).lean()
+      : [];
+    
+    // Lấy tên sở thích của người dùng
+    const userHobbiesNames = userHobbies.map(hobby => hobby.name);
+    console.log("Sở thích của người dùng:", userHobbiesNames);
 
     // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
     const groups = await Group.find({
@@ -188,6 +181,11 @@ const getNotJoinedGroupsService = async (userId) => {
       model: 'MyPhoto',
       select: 'name link type', // Populate background của nhóm
     })
+    .populate({
+      path: 'hobbies', // Truy vấn sở thích của nhóm
+      model: 'Hobby',
+      select: 'name' // Chỉ lấy tên sở thích
+    })
     .lean();
 
     // Thêm trường userState cho biết trạng thái tham gia của người dùng trong nhóm
@@ -202,7 +200,9 @@ const getNotJoinedGroupsService = async (userId) => {
     // Tính toán độ tương đồng giữa sở thích người dùng và sở thích nhóm, đồng thời tính số lượng bạn bè đã tham gia nhóm
     const groupsWithSimilarityAndFriends = groupsWithUserState.map((group) => {
       const groupHobbies = group.hobbies ? group.hobbies.map(hobby => hobby.name) : [];
-      const hobbySimilarity = getHobbySimilarity(userHobbies, groupHobbies); // Độ tương đồng sở thích
+      const hobbySimilarity = getHobbySimilarity(userHobbiesNames, groupHobbies); // Độ tương đồng sở thích
+      console.log('Sở thích của nhóm:', groupHobbies);
+
       const friendCount = getFriendCountInGroup(group, userId); // Số lượng bạn bè tham gia nhóm
 
       // Bạn có thể kết hợp cả 2 yếu tố này để tạo ra điểm gợi ý
@@ -216,16 +216,14 @@ const getNotJoinedGroupsService = async (userId) => {
       };
     });
 
-    // Sắp xếp các nhóm theo điểm gợi ý giảm dần (có thể dùng điểm suggestionScore để lọc nhóm gợi ý)
-    const sortedGroups = groupsWithSimilarityAndFriends.sort((a, b) => b.suggestionScore - a.suggestionScore);
-
-    return sortedGroups;
-
+    return groupsWithSimilarityAndFriends;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error);
-    throw new Error('Không thể lấy danh sách nhóm chưa tham gia.');
+    console.error("Lỗi khi lấy nhóm chưa tham gia:", error);
+    throw new Error("Lỗi khi lấy nhóm chưa tham gia.");
   }
 };
+
+
 
 // Hàm tạo nhóm mới
 const createGroupService = async ({

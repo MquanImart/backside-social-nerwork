@@ -7,7 +7,7 @@ import Admin from '../models/Admin.js'
 import Group from '../models/Group.js'
 import { emitEvent } from '../sockets/socket.js'
 import mongoose from 'mongoose'
-import cosineSimilarity from 'compute-cosine-similarity';
+import { getHobbySimilarity } from '../config/cosineSimilarity.js'
 
 const getArticleByIdService = async (articleId) => {
   try {
@@ -72,7 +72,6 @@ const getArticleByIdService = async (articleId) => {
     throw new Error('Lỗi khi lấy bài viết.');
   }
 };
-
 // Service tạo bài viết mới
 const createArticleService = async ({
   content,
@@ -147,22 +146,6 @@ const createArticleService = async ({
   }
 };
 
-const getHobbySimilarity = (userHobbies, groupHobbies) => {
-  if (!userHobbies || !groupHobbies || userHobbies.length === 0 || groupHobbies.length === 0) {
-    return 0; // Nếu một trong hai danh sách trống, độ tương đồng là 0
-  }
-
-  // Hợp nhất tất cả các sở thích thành một tập hợp duy nhất
-  const allHobbies = [...new Set([...userHobbies, ...groupHobbies])];
-
-  // Biểu diễn userHobbies và groupHobbies dưới dạng vector
-  const userVector = allHobbies.map(hobby => (userHobbies.includes(hobby) ? 1 : 0));
-  const groupVector = allHobbies.map(hobby => (groupHobbies.includes(hobby) ? 1 : 0));
-
-  // Tính cosine similarity giữa userVector và groupVector
-  return cosineSimilarity(userVector, groupVector);
-};
-
 const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -182,7 +165,7 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     const similarUsers = allUsers.filter((otherUser) => {
       const otherUserHobbies = otherUser.hobbies || [];
       const similarity = getHobbySimilarity(userHobbies, otherUserHobbies);
-      return similarity >= 0.7; // Lọc những người có độ tương thích >= 0.7
+      return similarity >= 0.5; // Lọc những người có độ tương thích >= 0.7
     });
 
     const similarUserIds = similarUsers.map((user) => user._id);
@@ -318,7 +301,6 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     throw new Error('Lỗi khi lấy bài viết.');
   }
 };
-
 // Service xóa bài viết
 const deleteArticleService = async (articleId) => {
   try {
@@ -369,7 +351,6 @@ const deleteArticleService = async (articleId) => {
     throw new Error(`Lỗi khi xóa bài viết: ${error.message}`);
   }
 };
-
 // Service thêm bình luận vào bài viết + socket thông báo rồi(chưa format lại thông báo) + chưa socket số comment
 const addCommentToArticleService = async ({
   postId,
@@ -451,7 +432,6 @@ const addCommentToArticleService = async ({
     throw new Error(`Lỗi khi thêm bình luận: ${error.message}`);
   }
 };
-
 // Service thêm phản hồi vào bình luận + socket thông báo rồi(chưa format lại thông báo) + chưa socket số comment
 const addReplyToCommentService = async ({
   postId,
@@ -545,7 +525,6 @@ const addReplyToCommentService = async ({
     throw new Error(`Lỗi khi thêm trả lời bình luận: ${error.message}`);
   }
 };
-
 
 // socket thông báo rồi(chưa format lại thông báo)
 const reportArticleService = async (postId, userId, reason) => {
@@ -962,7 +941,6 @@ const shareArticleService = async ({ postId, content, scope, userId }) => {
   }
 };
 
-
 const getAllArticlesByUserService = async (userId, profileId) => {
   // Kiểm tra tính hợp lệ của userId và profileId
   if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(profileId)) {
@@ -1242,8 +1220,6 @@ const approveReportService = async (reportId) => {
   return report;
 };
 
-
-
 const rejectReportService = async (reportId) => {
   const article = await Article.findOne({ "reports._id": reportId });
   if (!article) {
@@ -1375,8 +1351,6 @@ const getUserAvatarLink = async (user) => {
   }
   return { _id: '', link: '' }; 
 };
-
-
 
 
 export const articleService = {
