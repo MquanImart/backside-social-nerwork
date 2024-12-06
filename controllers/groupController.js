@@ -46,16 +46,15 @@ const getAllGroupArticles = async (req, res) => {
 const getNotJoinedGroups = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const { page = 1, limit = 3 } = req.query; // Mặc định trang 1, mỗi trang 3 nhóm
+    const { page = 1, limit = 6, searchTerm = '' } = req.query; 
 
-    const groupsData = await groupService.getNotJoinedGroupsService(userId, parseInt(page), parseInt(limit));
+    const groupsData = await groupService.getNotJoinedGroupsService(userId, parseInt(page), parseInt(limit), searchTerm);
     return res.status(200).json(groupsData);
   } catch (error) {
     console.error('Lỗi khi lấy danh sách nhóm chưa tham gia:', error.message);
     return res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 }
-
 
 const createGroup = async (req, res) => {
   try {

@@ -19,7 +19,7 @@ const getUserGroupsService = async (userId, page = 1, limit = 6, search = '') =>
   const skip = (page - 1) * limit;
 
   const searchFilter = search ? {
-    name: { $regex: search, $options: 'i' } // Tìm kiếm tên nhóm không phân biệt chữ hoa chữ thường
+    groupName: { $regex: search, $options: 'i' } // Tìm kiếm tên nhóm không phân biệt chữ hoa chữ thường
   } : {};
 
   // Tính toán tổng số nhóm
@@ -155,7 +155,7 @@ const getFriendCountInGroup = (group, userId) => {
   return friendCount;
 };
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
-const getNotJoinedGroupsService = async (userId, page = 1, limit = 3) => {
+const getNotJoinedGroupsService = async (userId, page = 1, limit = 3, searchTerm = '') => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new Error('ID người dùng không hợp lệ.');
@@ -176,49 +176,49 @@ const getNotJoinedGroupsService = async (userId, page = 1, limit = 3) => {
     const userHobbiesNames = userHobbies.map(hobby => hobby.name);
     console.log("Sở thích của người dùng:", userHobbiesNames);
     const skip = (page - 1) * limit; 
+
+    // Tạo query ban đầu
+    const query = {
+      $or: [
+        { 'members.listUsers.idUser': { $ne: userId } },
+        {
+          'members.listUsers': {
+            $elemMatch: { idUser: userId, state: 'pending' }
+          }
+        }
+      ],
+      _destroy: { $exists: false }
+    };
+
+    // Thêm điều kiện tìm kiếm nếu có searchTerm
+    if (searchTerm) {
+      query.groupName = { $regex: searchTerm, $options: 'i' }; // Tìm kiếm không phân biệt hoa thường trong groupName
+    }
+
     // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
-    const groups = await Group.find({
-      $or: [
-        { 'members.listUsers.idUser': { $ne: userId } },
-        {
-          'members.listUsers': {
-            $elemMatch: { idUser: userId, state: 'pending' }
-          }
-        }
-      ],
-      _destroy: { $exists: false }
-    })
-    .skip(skip) // Bỏ qua `skip` số nhóm
-    .limit(limit) // Giới hạn số nhóm mỗi trang
-    .populate({
-      path: 'avt',
-      model: 'MyPhoto',
-      select: 'name link type', // Populate avatar của nhóm
-    })
-    .populate({
-      path: 'backGround',
-      model: 'MyPhoto',
-      select: 'name link type', // Populate background của nhóm
-    })
-    .populate({
-      path: 'hobbies', // Truy vấn sở thích của nhóm
-      model: 'Hobby',
-      select: 'name' // Chỉ lấy tên sở thích
-    })
-    .lean();
+    const groups = await Group.find(query) // Sử dụng query đã được cập nhật
+      .skip(skip) // Bỏ qua `skip` số nhóm
+      .limit(limit) // Giới hạn số nhóm mỗi trang
+      .populate({
+        path: 'avt',
+        model: 'MyPhoto',
+        select: 'name link type', // Populate avatar của nhóm
+      })
+      .populate({
+        path: 'backGround',
+        model: 'MyPhoto',
+        select: 'name link type', // Populate background của nhóm
+      })
+      .populate({
+        path: 'hobbies', // Truy vấn sở thích của nhóm
+        model: 'Hobby',
+        select: 'name' // Chỉ lấy tên sở thích
+      })
+      .lean();
 
 
-    const totalGroups = await Group.countDocuments({
-      $or: [
-        { 'members.listUsers.idUser': { $ne: userId } },
-        {
-          'members.listUsers': {
-            $elemMatch: { idUser: userId, state: 'pending' }
-          }
-        }
-      ],
-      _destroy: { $exists: false }
-    });
+    // Đếm tổng số nhóm phù hợp với query (bao gồm cả điều kiện tìm kiếm)
+    const totalGroups = await Group.countDocuments(query);
 
     // Tính số trang
     const pages = Math.ceil(totalGroups / limit);
