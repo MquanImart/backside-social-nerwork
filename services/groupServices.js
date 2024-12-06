@@ -11,15 +11,35 @@ import { cloudStorageService } from './cloudStorageService.js'
 import { getHobbySimilarity } from '../config/cosineSimilarity.js'
 
 
-const getUserGroupsService = async (userId) => {
+const getUserGroupsService = async (userId, page = 1, limit = 6, search = '') => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('ID người dùng không hợp lệ.');
   }
 
+  const skip = (page - 1) * limit;
+
+  const searchFilter = search ? {
+    groupName: { $regex: search, $options: 'i' } // Tìm kiếm tên nhóm không phân biệt chữ hoa chữ thường
+  } : {};
+
+  // Tính toán tổng số nhóm
+  const totalGroups = await Group.countDocuments({
+    'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } },
+    _destroy: { $exists: false },
+    ...searchFilter,
+  });
+
+  // Tính toán tổng số trang
+  const totalPages = Math.ceil(totalGroups / limit);
+
+  // Lấy các nhóm của người dùng với phân trang
   const userGroups = await Group.find({
     'members.listUsers': { $elemMatch: { idUser: userId, state: 'accepted' } },
-    _destroy: { $exists: false }
+    _destroy: { $exists: false },
+    ...searchFilter,  // Áp dụng điều kiện tìm kiếm
   })
+    .skip(skip)  // Sử dụng skip cho phân trang
+    .limit(limit) // Giới hạn số lượng nhóm trả về
     .populate({
       path: 'avt', // Lấy avatar của nhóm
       model: 'MyPhoto',
@@ -32,10 +52,8 @@ const getUserGroupsService = async (userId) => {
     })
     .lean();
 
-  return userGroups;
+  return { groups: userGroups, totalPages, totalGroups };
 };
-
-
 // Service lấy tất cả bài viết từ các nhóm mà người dùng đã tham gia và được duyệt
 const getAllGroupArticlesService = async (userId, page, limit) => {
   try {
@@ -136,9 +154,8 @@ const getFriendCountInGroup = (group, userId) => {
 
   return friendCount;
 };
-
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
-const getNotJoinedGroupsService = async (userId) => {
+const getNotJoinedGroupsService = async (userId, page = 1, limit = 3, searchTerm = '') => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new Error('ID người dùng không hợp lệ.');
@@ -158,9 +175,10 @@ const getNotJoinedGroupsService = async (userId) => {
     // Lấy tên sở thích của người dùng
     const userHobbiesNames = userHobbies.map(hobby => hobby.name);
     console.log("Sở thích của người dùng:", userHobbiesNames);
+    const skip = (page - 1) * limit; 
 
-    // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
-    const groups = await Group.find({
+    // Tạo query ban đầu
+    const query = {
       $or: [
         { 'members.listUsers.idUser': { $ne: userId } },
         {
@@ -170,23 +188,40 @@ const getNotJoinedGroupsService = async (userId) => {
         }
       ],
       _destroy: { $exists: false }
-    })
-    .populate({
-      path: 'avt',
-      model: 'MyPhoto',
-      select: 'name link type', // Populate avatar của nhóm
-    })
-    .populate({
-      path: 'backGround',
-      model: 'MyPhoto',
-      select: 'name link type', // Populate background của nhóm
-    })
-    .populate({
-      path: 'hobbies', // Truy vấn sở thích của nhóm
-      model: 'Hobby',
-      select: 'name' // Chỉ lấy tên sở thích
-    })
-    .lean();
+    };
+
+    // Thêm điều kiện tìm kiếm nếu có searchTerm
+    if (searchTerm) {
+      query.groupName = { $regex: searchTerm, $options: 'i' }; // Tìm kiếm không phân biệt hoa thường trong groupName
+    }
+
+    // Tìm các nhóm mà người dùng chưa tham gia hoặc đang ở trạng thái "pending"
+    const groups = await Group.find(query) // Sử dụng query đã được cập nhật
+      .skip(skip) // Bỏ qua `skip` số nhóm
+      .limit(limit) // Giới hạn số nhóm mỗi trang
+      .populate({
+        path: 'avt',
+        model: 'MyPhoto',
+        select: 'name link type', // Populate avatar của nhóm
+      })
+      .populate({
+        path: 'backGround',
+        model: 'MyPhoto',
+        select: 'name link type', // Populate background của nhóm
+      })
+      .populate({
+        path: 'hobbies', // Truy vấn sở thích của nhóm
+        model: 'Hobby',
+        select: 'name' // Chỉ lấy tên sở thích
+      })
+      .lean();
+
+
+    // Đếm tổng số nhóm phù hợp với query (bao gồm cả điều kiện tìm kiếm)
+    const totalGroups = await Group.countDocuments(query);
+
+    // Tính số trang
+    const pages = Math.ceil(totalGroups / limit);
 
     // Thêm trường userState cho biết trạng thái tham gia của người dùng trong nhóm
     const groupsWithUserState = groups.map((group) => {
@@ -212,19 +247,18 @@ const getNotJoinedGroupsService = async (userId) => {
         ...group,
         hobbySimilarity,
         friendCount,
-        suggestionScore,
+        suggestionScore
       };
     });
-
-    return groupsWithSimilarityAndFriends;
+    return {
+      groups: groupsWithSimilarityAndFriends,
+      pages, // Tổng số trang
+    };
   } catch (error) {
     console.error("Lỗi khi lấy nhóm chưa tham gia:", error);
     throw new Error("Lỗi khi lấy nhóm chưa tham gia.");
   }
 };
-
-
-
 // Hàm tạo nhóm mới
 const createGroupService = async ({
   groupName,
@@ -260,7 +294,6 @@ const createGroupService = async ({
   const savedGroup = await newGroup.save();
   return savedGroup;
 };
-
 // Hàm thêm một quản trị viên mới (Administrator) vào nhóm
 const addAdminService = async (groupId, adminId, currentUserId) => {
   if (
@@ -346,7 +379,6 @@ const addAdminService = async (groupId, adminId, currentUserId) => {
   };
 };
 
-
 const getProcessedArticlesService = async (groupId, page, limit) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
@@ -427,7 +459,6 @@ const getProcessedArticlesService = async (groupId, page, limit) => {
     throw new Error('Lỗi khi lấy bài viết đã xử lý của nhóm.');
   }
 };
-
 
 const createArticleService = async ({
   content,
@@ -520,7 +551,6 @@ const getPendingArticlesService = async (groupId) => {
     throw new Error(error.message);
   }
 };
-
 // Cập nhật trạng thái bài viết
 const updateArticleStateService = async (groupId, articleId, newState) => {
   try {
