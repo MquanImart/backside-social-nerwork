@@ -433,8 +433,48 @@ const getFriendSuggestions = async (userId, page, limit) => {
     })
     
     const allUserIdNotFriend = usersNotInFriends.map((item)=> item._id);
-    const result = getCommonFriendsAndGroups(userId, allUserIdNotFriend);
-    console.log((await result).length)
+    const commonFriendAndGroup = await getCommonFriendsAndGroups(userId, allUserIdNotFriend);
+    const userBasedOnCommon = await getUsersBasedOnCommonHobbies(userId, commonFriendAndGroup);
+
+    userBasedOnCommon.sort((a, b) => {
+      if (b.totals !== a.totals) {
+        return b.totals - a.totals;
+      }
+      else if (b.commonFriends !== a.commonFriends) {
+        return b.commonFriends - a.commonFriends; // Sắp xếp theo số bạn chung giảm dần
+      }
+      return b.commonGroups - a.commonGroups; // Nếu số bạn chung bằng nhau, sắp xếp theo số nhóm chung giảm dần
+    });
+
+    const userIds = userBasedOnCommon.map(user => user.id);
+    const paginatedUserIds = userIds.slice((page - 1) * limit, page * limit);
+
+    const dataResult = await User.find({ _id: { $in: paginatedUserIds } })
+      .skip((page - 1) * 10)
+      .limit(limit);
+
+    dataResult.sort((a, b) => {
+      const indexA = paginatedUserIds.indexOf(a._id.toString());
+      const indexB = paginatedUserIds.indexOf(b._id.toString());
+      return indexA - indexB; // Giữ thứ tự gốc từ mảng paginatedUserIds
+    });
+      
+    const resultData = await Promise.all(dataResult.map(async (user) => {
+      const avt = await MyPhoto.findById(user.avt[user.avt.length - 1]);
+      
+        return {        
+            idUser: user._id,       
+            avt: avt,
+            name: user.displayName,
+            aboutMe: user.aboutMe
+        };
+    })); 
+
+    return {
+      count: resultData.length,
+      dataFriend: resultData
+    };
+
     return result;
 
 } catch (error) {
@@ -453,71 +493,109 @@ const getCommonFriendsAndGroups = async (userId, allRelatedIds) => {
 
     const mainUserFriends = new Set(mainUser.friends.map((friend) => friend.idUser.toString()));
 
-    // Lấy danh sách nhóm của người dùng chính
-    const userGroups = await Group.find({
-      'members.listUsers.idUser': userId,
-    })
-      .select('members.listUsers.idUser')
-      .exec();
-
     const mainUserGroups = new Set(
-      userGroups.flatMap((group) => group.members.listUsers.map((member) => member.idUser.toString()))
+      (
+        await Group.find({ 'members.listUsers.idUser': userId })
+          .select('_id')
+          .exec()
+      ).map((group) => group._id.toString())
+    );
+    
+    // Lấy thông tin bạn bè và nhóm của tất cả các relatedId
+    const relatedUsers = await User.find({ _id: { $in: allRelatedIds } })
+    .populate('friends.idUser')
+    .exec();
+
+    const relatedGroups = await Group.find({
+    'members.listUsers.idUser': { $in: allRelatedIds },
+    })
+    .select('_id members.listUsers.idUser')
+    .exec();
+
+    // Tổ chức dữ liệu nhóm của tất cả relatedIds để xử lý nhanh hơn
+    const relatedUserGroupsMap = new Map();
+    relatedGroups.forEach((group) => {
+    group.members.listUsers.forEach((member) => {
+      const memberId = member.idUser.toString();
+      if (!relatedUserGroupsMap.has(memberId)) {
+          relatedUserGroupsMap.set(memberId, new Set());
+      }
+      relatedUserGroupsMap.get(memberId).add(group._id.toString());
+    });
+    });
+
+    // Tính toán bạn chung và nhóm chung
+    const result = relatedUsers.map((relatedUser) => {
+    const relatedId = relatedUser._id.toString();
+
+    // Bạn bè của người dùng liên quan
+    const relatedUserFriends = new Set(
+      relatedUser.friends.map((friend) => friend.idUser.toString())
     );
 
-    // Kết quả để lưu số lượng bạn bè và nhóm chung
-    const result = [];
+    // Nhóm của người dùng liên quan
+    const relatedUserGroups = relatedUserGroupsMap.get(relatedId) || new Set();
 
-    for (const relatedId of allRelatedIds) {
-      const relatedUser = await User.findById(relatedId)
-        .populate('friends.idUser')
-        .exec();
+    // Tính số lượng bạn bè chung
+    const commonFriends = Array.from(mainUserFriends).filter((friendId) =>
+      relatedUserFriends.has(friendId)
+    ).length;
 
-      if (!relatedUser) {
-        result.push({
-          id: relatedId,
-          commonFriends: 0,
-          commonGroups: 0,
-        });
-        continue;
-      }
+    // Tính số lượng nhóm chung
+    const commonGroups = Array.from(mainUserGroups).filter((groupId) =>
+      relatedUserGroups.has(groupId)
+    ).length;
 
-      // Bạn bè của người dùng liên quan
-      const relatedUserFriends = new Set(
-        relatedUser.friends.map((friend) => friend.idUser.toString())
-      );
-
-      // Lấy danh sách nhóm của người dùng liên quan
-      const relatedUserGroups = await Group.find({
-        'members.listUsers.idUser': relatedId,
-      })
-        .select('members.listUsers.idUser')
-        .exec();
-
-      const relatedUserGroupMembers = new Set(
-        relatedUserGroups.flatMap((group) => group.members.listUsers.map((member) => member.idUser.toString()))
-      );
-
-      // Tính số lượng bạn bè chung
-      const commonFriends = Array.from(mainUserFriends).filter((friendId) =>
-        relatedUserFriends.has(friendId)
-      ).length;
-
-      // Tính số lượng nhóm chung
-      const commonGroups = Array.from(mainUserGroups).filter((groupId) =>
-        relatedUserGroupMembers.has(groupId)
-      ).length;
-
-      result.push({
-        id: relatedId,
-        commonFriends,
-        commonGroups,
-      });
-    }
+    return {
+      id: relatedId,
+      commonFriends,
+      commonGroups,
+      totals: commonFriends + commonGroups
+    };
+    });
 
     return result;
   } catch (error) {
     console.error(error);
     throw new Error('Lỗi khi kiểm tra bạn bè và nhóm chung');
+  }
+};
+
+const getUsersBasedOnCommonHobbies = async (userId, otherUsersData) => {
+  try {
+    // Lấy danh sách sở thích của người dùng chính (userId)
+    const mainUser = await User.findById(userId).populate('hobbies').exec();
+    if (!mainUser) throw new Error('User không tồn tại');
+
+    const mainUserHobbies = mainUser.hobbies.map(hobby => hobby._id.toString());
+    // Tính toán số lượng sở thích chung và cập nhật totals cho các người dùng liên quan
+    const result = await Promise.all(otherUsersData.map(async (relatedUserData) => {
+      const relatedUser = await User.findById(relatedUserData.id).populate('hobbies').exec();
+      if (!relatedUser) throw new Error(`User with ID ${relatedUserData.id} không tồn tại`);
+      if (relatedUser.hobbies) {
+        const relatedUserHobbies = relatedUser.hobbies.map(hobby => hobby._id.toString());
+
+        // Tính số lượng sở thích chung
+        const commonHobbies = mainUserHobbies.filter(hobbyId => relatedUserHobbies.includes(hobbyId)).length;
+  
+        // Tính tỉ lệ phần trăm sở thích chung và cập nhật totals
+        const hobbyPercentage = commonHobbies / mainUserHobbies.length;
+        const newTotals = relatedUserData.totals + hobbyPercentage*(relatedUserData.totals); // Tăng totals theo tỉ lệ phần trăm
+        return {
+          ...relatedUserData,
+          commonHobbies,
+          totals: newTotals,
+        };
+      } else {return relatedUserData}
+    }));
+
+    // Sắp xếp kết quả theo tổng (newTotals) giảm dần
+    result.sort((a, b) => b.newTotals - a.newTotals);
+
+    return result;
+  } catch (error) {
+    console.error(error);
+    throw new Error('Lỗi khi gợi ý người dùng');
   }
 };
 
