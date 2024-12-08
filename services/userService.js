@@ -273,6 +273,7 @@ const getUserHobbies = async (userId) => {
     throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
   }
   const user = await User.findById(userId).select('hobbies');
+  if (!user || !user.hobbies) return [];
 
   const result = await Promise.all(user.hobbies.map(async (_id)=> {
     if (!mongoose.Types.ObjectId.isValid(_id)) {
