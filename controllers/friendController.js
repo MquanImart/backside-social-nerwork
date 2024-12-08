@@ -105,7 +105,19 @@ const getAllFriendByIdUser = async (req, res) => {
       return res.status(500).json({ msg: 'Lỗi server' })
     }
   }
+  const getFriendSuggestions = async (req, res) => {
+    const userID = req.params.UserId;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    try {
+      const result = await friendService.getFriendSuggestions(userID, page, limit);
+      res.status(200).json(result);
 
+    } catch (error) {
+      console.error('Lỗi khi lấy danh sách bạn bè:', error);
+      res.status(500).json({ error: 'Không thể lấy danh sách đề xuất' });
+    }
+  };
 export const friendController = {
     getAllFriendByIdUser,
     getSuggestAddFriend,
@@ -114,5 +126,6 @@ export const friendController = {
     updateSatusFriendRequest,
     getMyRequest,
     revokeInvitation,
-    unFriend
+    unFriend,
+    getFriendSuggestions
 }

@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import AddFriends from '../models/AddFriends.js';
 import MyPhoto from '../models/MyPhoto.js';
+import Group from '../models/Group.js';
 import { emitEvent } from '../sockets/socket.js'
 
 const getAllFriendByIdUser = async (userId, page, limit) => {
@@ -401,6 +402,125 @@ const getUserAvatarLink = async (user) => {
   return { _id: '', link: '' }; 
 };
 
+const getFriendSuggestions = async (userId, page, limit) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw new Error('ID người dùng không hợp lệ. ID phải có 24 ký tự hợp lệ.')
+      }
+    
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const user = await User.findById(userObjectId);
+    let allFriendsIds = user.friends.map(friend => friend.idUser); 
+
+    const sentFriendRequests = await AddFriends.find({
+      receiverId: userId,  // Điều kiện người nhận
+      status: 'pending'    // Điều kiện trạng thái là 'pending'
+    }).select('senderId');
+    
+    const receivedFriendRequests = await AddFriends.find({
+      senderId: userId,
+      status: 'pending' 
+    }).select('receiverId');
+    
+  
+    const senders = sentFriendRequests.map(friend => friend.senderId.toString());
+    const receivers = receivedFriendRequests.map(friend => friend.receiverId.toString());
+
+    const allRelatedIds = [...senders, ...receivers, ...allFriendsIds, user._id];
+
+    const usersNotInFriends = await User.find({
+      _id: { $nin: allRelatedIds }
+    })
+    
+    const allUserIdNotFriend = usersNotInFriends.map((item)=> item._id);
+    const result = getCommonFriendsAndGroups(userId, allUserIdNotFriend);
+    console.log((await result).length)
+    return result;
+
+} catch (error) {
+    throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
+}
+};
+
+const getCommonFriendsAndGroups = async (userId, allRelatedIds) => {
+  try {
+    // Lấy thông tin người dùng chính (userId) bao gồm danh sách bạn bè và nhóm
+    const mainUser = await User.findById(userId)
+      .populate('friends.idUser')
+      .exec();
+
+    if (!mainUser) throw new Error('User không tồn tại');
+
+    const mainUserFriends = new Set(mainUser.friends.map((friend) => friend.idUser.toString()));
+
+    // Lấy danh sách nhóm của người dùng chính
+    const userGroups = await Group.find({
+      'members.listUsers.idUser': userId,
+    })
+      .select('members.listUsers.idUser')
+      .exec();
+
+    const mainUserGroups = new Set(
+      userGroups.flatMap((group) => group.members.listUsers.map((member) => member.idUser.toString()))
+    );
+
+    // Kết quả để lưu số lượng bạn bè và nhóm chung
+    const result = [];
+
+    for (const relatedId of allRelatedIds) {
+      const relatedUser = await User.findById(relatedId)
+        .populate('friends.idUser')
+        .exec();
+
+      if (!relatedUser) {
+        result.push({
+          id: relatedId,
+          commonFriends: 0,
+          commonGroups: 0,
+        });
+        continue;
+      }
+
+      // Bạn bè của người dùng liên quan
+      const relatedUserFriends = new Set(
+        relatedUser.friends.map((friend) => friend.idUser.toString())
+      );
+
+      // Lấy danh sách nhóm của người dùng liên quan
+      const relatedUserGroups = await Group.find({
+        'members.listUsers.idUser': relatedId,
+      })
+        .select('members.listUsers.idUser')
+        .exec();
+
+      const relatedUserGroupMembers = new Set(
+        relatedUserGroups.flatMap((group) => group.members.listUsers.map((member) => member.idUser.toString()))
+      );
+
+      // Tính số lượng bạn bè chung
+      const commonFriends = Array.from(mainUserFriends).filter((friendId) =>
+        relatedUserFriends.has(friendId)
+      ).length;
+
+      // Tính số lượng nhóm chung
+      const commonGroups = Array.from(mainUserGroups).filter((groupId) =>
+        relatedUserGroupMembers.has(groupId)
+      ).length;
+
+      result.push({
+        id: relatedId,
+        commonFriends,
+        commonGroups,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error(error);
+    throw new Error('Lỗi khi kiểm tra bạn bè và nhóm chung');
+  }
+};
+
 export const friendService = {
     getAllFriendByIdUser,
     getSuggestAddFriend,
@@ -409,5 +529,6 @@ export const friendService = {
     updateSatusFriendRequest,
     getMyRequest,
     revokeInvitation,
-    unFriend
+    unFriend,
+    getFriendSuggestions
 }
