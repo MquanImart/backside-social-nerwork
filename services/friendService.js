@@ -36,7 +36,7 @@ const getAllFriendByIdUser = async (userId, page, limit) => {
     }
 }
 
-const getSuggestAddFriend= async (userId, page, limit) => {
+const getSuggestAddFriend= async (userId, page, limit, filter) => {
 
     try {
         if (!mongoose.Types.ObjectId.isValid(userId)) {
