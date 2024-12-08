@@ -36,6 +36,7 @@ const getAllFriendByIdUser = async (userId, page, limit) => {
     }
 }
 
+
 const getSuggestAddFriend= async (userId, page, limit, filter) => {
 
     try {
@@ -66,8 +67,6 @@ const getSuggestAddFriend= async (userId, page, limit, filter) => {
         const usersNotInFriends = await User.find({
           _id: { $nin: allRelatedIds }
         })
-        .skip((page - 1) * 10)
-        .limit(limit);
 
         const resultData = await Promise.all(usersNotInFriends.map(async (user) => {
           const avt = await MyPhoto.findById(user.avt[user.avt.length - 1]);
@@ -80,9 +79,21 @@ const getSuggestAddFriend= async (userId, page, limit, filter) => {
             };
         })); 
 
+        const filteredUsers = resultData.filter(user => {
+          const normalizedName = user.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const normalizedFitler = filter.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          return normalizedName.includes(normalizedFitler);
+        });
+
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit;
+        
+        // Lấy các phần tử trong khoảng chỉ mục
+        const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
         return {
-          count: resultData.length,
-          dataFriend: resultData
+          count: filteredUsers.length,
+          dataFriend: paginatedUsers
         };
     } catch (error) {
         throw new Error('Có lỗi xảy ra xong khi lấy danh sách đề xuất:', error);
