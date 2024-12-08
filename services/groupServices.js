@@ -142,20 +142,38 @@ const getAllGroupArticlesService = async (userId, page, limit) => {
   }
 };
 
-const getFriendCountInGroup = (group, userId) => {
+const getFriendCountInGroup = async (group, userId) => {
   if (!group || !group.members || !group.members.listUsers) return 0;
 
-  // Lọc những người bạn tham gia nhóm
-  const friendCount = group.members.listUsers.filter(member => {
-    return member.idUser.toString() !== userId && 
-           member.state === 'accepted' && 
-           member.idUser.toString() !== userId;
-  }).length;
+  try {
+    // Lấy danh sách bạn bè của người dùng từ database
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error("Không tìm thấy người dùng.");
+      return 0;
+    }
 
-  return friendCount;
+    const userFriends = user.friends.map(friend => friend.idUser.toString());
+
+    // Lọc những người bạn chung đã tham gia nhóm ở trạng thái 'accepted'
+    const friendCount = group.members.listUsers.filter(member => {
+      return userFriends.includes(member.idUser.toString()) &&
+             member.state === 'accepted' &&
+             member.idUser.toString() !== userId; 
+    }).length;
+
+    console.log('name group', group.groupName);
+    console.log('friendCount', friendCount);
+
+    return friendCount;
+  } catch (error) {
+    console.error("Error fetching user or calculating friend count:", error);
+    return 0;
+  }
 };
+
 // Service lấy danh sách các nhóm mà người dùng chưa tham gia
-const getNotJoinedGroupsService = async (userId, page = 1, limit = 3, searchTerm = '') => {
+const getNotJoinedGroupsService = async (userId, page = 1, limit = 6, searchTerm = '') => {
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new Error('ID người dùng không hợp lệ.');
@@ -233,23 +251,27 @@ const getNotJoinedGroupsService = async (userId, page = 1, limit = 3, searchTerm
     });
 
     // Tính toán độ tương đồng giữa sở thích người dùng và sở thích nhóm, đồng thời tính số lượng bạn bè đã tham gia nhóm
-    const groupsWithSimilarityAndFriends = groupsWithUserState.map((group) => {
-      const groupHobbies = group.hobbies ? group.hobbies.map(hobby => hobby.name) : [];
-      const hobbySimilarity = getHobbySimilarity(userHobbiesNames, groupHobbies); // Độ tương đồng sở thích
-      console.log('Sở thích của nhóm:', groupHobbies);
+    const groupsWithSimilarityAndFriends = await Promise.all(
+      groupsWithUserState.map(async (group) => {
+        const groupHobbies = group.hobbies
+          ? group.hobbies.map((hobby) => hobby.name)
+          : [];
+        const hobbySimilarity = getHobbySimilarity(
+          userHobbiesNames,
+          groupHobbies,
+        );
+        const friendCount = await getFriendCountInGroup(group, userId);
 
-      const friendCount = getFriendCountInGroup(group, userId); // Số lượng bạn bè tham gia nhóm
+        const suggestionScore = hobbySimilarity + friendCount * 0.05;
 
-      // Bạn có thể kết hợp cả 2 yếu tố này để tạo ra điểm gợi ý
-      const suggestionScore = hobbySimilarity + (friendCount * 0.05); // Thêm trọng số cho số bạn bè tham gia
-
-      return {
-        ...group,
-        hobbySimilarity,
-        friendCount,
-        suggestionScore
-      };
-    });
+        return {
+          ...group,
+          hobbySimilarity,
+          friendCount,
+          suggestionScore,
+        };
+      }),
+    );
     return {
       groups: groupsWithSimilarityAndFriends,
       pages, // Tổng số trang

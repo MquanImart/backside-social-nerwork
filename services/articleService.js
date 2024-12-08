@@ -165,7 +165,7 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
     const similarUsers = allUsers.filter((otherUser) => {
       const otherUserHobbies = otherUser.hobbies || [];
       const similarity = getHobbySimilarity(userHobbies, otherUserHobbies);
-      return similarity >= 0.2; // Lọc những người có độ tương thích >= 0.3
+      return similarity >= 0.25; // Lọc những người có độ tương thích >= 0.3
     });
 
     const similarUserIds = similarUsers.map((user) => user._id);
