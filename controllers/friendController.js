@@ -18,8 +18,9 @@ const getAllFriendByIdUser = async (req, res) => {
     const userID = req.params.UserId;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const filter = req.query.filter || '';
     try {
-      const result = await friendService.getSuggestAddFriend(userID, page, limit);
+      const result = await friendService.getSuggestAddFriend(userID, page, limit, filter);
       res.status(200).json(result);
 
     } catch (error) {
