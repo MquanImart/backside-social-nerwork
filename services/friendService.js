@@ -17,7 +17,7 @@ const getAllFriendByIdUser = async (userId, page, limit) => {
         
         const resultData = await Promise.all(user.friends.slice((page-1)*limit, page*limit).map(async (friend) => {
             const friendData = await User.findById(friend.idUser);
-            const avt = await MyPhoto.findById(friendData.avt[user.avt.length - 1]);
+            const avt = await MyPhoto.findById(friendData.avt[friendData.avt.length - 1]);
             return {         
                 idUser: friend.idUser,       
                 addDate: friend.addDate,
