@@ -166,11 +166,11 @@ const createConversation = async (userID, friendID, message) => {
     if (!user) {
       throw new Error('User not found');
     }
-    const hasAllFriends = user.friends.some(friend => friend.idUser.toString() === friendID.toString())
+    // const hasAllFriends = user.friends.some(friend => friend.idUser.toString() === friendID.toString())
 
-    if (!hasAllFriends) {
-      return false;
-    }
+    // if (!hasAllFriends) {
+    //   return false;
+    // }
     const newConversation = new Conversation({
       _user: [userID, friendID],
       content: [message]
@@ -239,7 +239,7 @@ const getAllFriendWithoutChat = async (userID) => {
       _id: { $in: friendsWithoutChat }
     });
     const result = await Promise.all(usersWithoutChat.map(async (userItem) => {
-          const avt = await MyPhoto.findById(userItem.avt[user.avt.length - 1]);
+          const avt = await MyPhoto.findById(userItem.avt[userItem.avt.length - 1]);
           return {
           _id: userItem._id,
           avt: avt,
