@@ -791,23 +791,27 @@ const deleteGroup = async (req, res) => {
 
 const leaveGroup = async (req, res) => {
   try {
-    const { groupId } = req.params // Lấy ID của nhóm từ params
-    const { userId } = req.body // Lấy userId từ body request
+    const { groupId } = req.params;
+    const { userId } = req.body;
 
-    // Gọi service để rời nhóm
-    const result = await groupService.leaveGroupService(groupId, userId)
+    // Kiểm tra userId
+    if (!userId) {
+      return res.status(400).json({ message: 'Thiếu userId' });
+    }
+
+    const result = await groupService.leaveGroupService(groupId, userId);
 
     return res.status(200).json({
       message: 'Rời nhóm thành công và xóa tất cả dữ liệu liên quan.',
-      result
-    })
+      result,
+    });
   } catch (error) {
-    console.error('Lỗi khi rời nhóm:', error.message)
+    console.error('Lỗi khi rời nhóm:', error.message);
     return res
       .status(500)
-      .json({ message: 'Có lỗi xảy ra khi rời nhóm.', error: error.message })
+      .json({ message: 'Có lỗi xảy ra khi rời nhóm.', error: error.message });
   }
-}
+};
 
 const getFriendsNotInGroup = async (req, res) => {
   const { userId, groupId } = req.params

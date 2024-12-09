@@ -1416,73 +1416,76 @@ const deleteGroupService = async (groupId, userId) => {
 }
 
 const leaveGroupService = async (groupId, userId) => {
-  // Kiểm tra tính hợp lệ của các ID
-  if (
-    !mongoose.Types.ObjectId.isValid(groupId) ||
-    !mongoose.Types.ObjectId.isValid(userId)
-  ) {
-    throw new Error('ID nhóm hoặc ID người dùng không hợp lệ.')
-  }
+  try {
+    if (
+      !mongoose.Types.ObjectId.isValid(groupId) ||
+      !mongoose.Types.ObjectId.isValid(userId)
+    ) {
+      throw new Error('ID nhóm hoặc ID người dùng không hợp lệ.');
+    }
 
-  const group = await Group.findById(groupId)
-  if (!group) {
-    throw new Error('Nhóm không tồn tại.')
-  }
+    const group = await Group.findById(groupId);
+    if (!group) {
+      throw new Error('Nhóm không tồn tại.');
+    }
 
-  const memberIndex = group.members.listUsers.findIndex(
-    (member) =>
-      member.idUser.toString() === userId && member.state === 'accepted'
-  )
-  if (memberIndex === -1) {
-    throw new Error('Người dùng không phải là thành viên của nhóm.')
-  }
+    const memberIndex = group.members.listUsers.findIndex(
+      (member) =>
+        member.idUser.toString() === userId && member.state === 'accepted'
+    );
+    if (memberIndex === -1) {
+      throw new Error('Người dùng không phải là thành viên của nhóm.');
+    }
 
-  const userArticles = await Article.find({
-    groupID: groupId,
-    createdBy: userId,
-    state: 'processed', 
-    _destroy: { $exists: false }
-  })
-
-  await Article.updateMany(
-    {
+    const userArticles = await Article.find({
       groupID: groupId,
       createdBy: userId,
       state: 'processed',
-      _destroy: { $exists: false }
-    },
-    { _destroy: new Date() }
-  )
+      _destroy: { $exists: false },
+    });
 
-  const deletedArticleCount = userArticles.length
-  group.article.count -= deletedArticleCount
+    await Article.updateMany(
+      {
+        groupID: groupId,
+        createdBy: userId,
+        state: 'processed',
+        _destroy: { $exists: false },
+      },
+      { _destroy: new Date() }
+    );
 
-  group.article.listArticle = group.article.listArticle.filter(
-    (article) => article.createdBy.toString() !== userId
-  )
+    const deletedArticleCount = userArticles.length;
+    group.article.count -= deletedArticleCount;
 
-  // Xóa người dùng khỏi danh sách quản trị viên nếu có
-  group.Administrators = group.Administrators.filter(
-    (admin) => admin.idUser.toString() !== userId
-  )
+    // Kiểm tra và filter listArticle
+    if (Array.isArray(group.article.listArticle)) {
+      group.article.listArticle = group.article.listArticle.filter(
+        (article) => article.createdBy && article.createdBy.toString() !== userId
+      );
+    }
 
-  // Xóa người dùng khỏi danh sách thành viên
-  group.members.listUsers.splice(memberIndex, 1)
-  group.members.count -= 1 // Giảm số lượng thành viên
+    group.Administrators = group.Administrators.filter(
+      (admin) => admin.idUser.toString() !== userId
+    );
 
-  // Kiểm tra nếu số thành viên còn lại là 0, thì tự động xóa nhóm
-  if (group.members.count === 0) {
-    await Group.findByIdAndDelete(groupId) // Xóa nhóm nếu không còn thành viên
-    return { message: `Đã rời nhóm và nhóm đã bị xóa do không còn thành viên.` }
+    group.members.listUsers.splice(memberIndex, 1);
+    group.members.count -= 1;
+
+    if (group.members.count === 0) {
+      await Group.findByIdAndDelete(groupId);
+      return { message: `Đã rời nhóm và nhóm đã bị xóa do không còn thành viên.` };
+    }
+
+    await group.save();
+
+    return {
+      message: `Đã rời nhóm và xóa tất cả ${deletedArticleCount} bài viết liên quan.`,
+    };
+  } catch (error) {
+    console.error('Lỗi khi rời nhóm:', error);
+    throw new Error('Có lỗi xảy ra khi rời nhóm.'); 
   }
-
-  // Lưu lại thay đổi
-  await group.save()
-
-  return {
-    message: `Đã rời nhóm và xóa tất cả ${deletedArticleCount} bài viết liên quan.`
-  }
-}
+};
 
 const getFriendsNotInGroupService = async (userId, groupId) => {
   try {
