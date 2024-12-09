@@ -215,6 +215,7 @@ const getAllArticlesWithCommentsService = async (userId, page = 1, limit = 10) =
             }, // Bài viết của bản thân
             { 
               createdBy: { $in: similarUserIds },
+              scope: 'public', 
               groupID: { $in: [null, undefined] }
             }, // Bài viết của bản thân
             { 
