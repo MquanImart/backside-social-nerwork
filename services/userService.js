@@ -5,6 +5,7 @@ import AddFriends from '../models/AddFriends.js'
 import bcrypt from 'bcryptjs'
 import Hobby from '../models/Hobby.js'
 import MyPhoto from '../models/MyPhoto.js'
+
 // Hàm để lấy thông tin người dùng theo ID
 const getUserByIdService = async (userId) => {
   // Tìm người dùng theo ID và populate các trường avt và backGround để lấy chi tiết từ MyPhoto
@@ -294,6 +295,18 @@ const updateUser = async (userId, newData, avtUrl, backGroundUrl) => {
     }
     const user = await User.findById(userId);
 
+    if (newData.account && newData.account.password) {
+      const inputPassword = newData.account.password;
+      const storedPassword = user.account.password; 
+  
+      const isMatch = await bcrypt.compare(inputPassword, storedPassword);
+      if (!isMatch) {
+        return {
+          success: false,
+          message: "Mật khẩu không chính xác"
+        }
+      }
+    }
     if (avtUrl !== ''){
       try {
         // Tạo một đối tượng MyPhoto mới
