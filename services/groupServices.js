@@ -1332,6 +1332,12 @@ const editGroupService = async (groupId, userId, groupName, introduction, hobbie
   if (!group) {
     throw new Error('Nhóm không tồn tại.');
   }
+  if (groupName) {
+    const existingGroup = await Group.findOne({ groupName: groupName.trim() });
+    if (existingGroup && existingGroup._id.toString() !== groupId) {
+      throw new Error('Tên nhóm đã tồn tại. Vui lòng chọn tên khác.');
+    }
+  }
 
   if (group.idAdmin.toString() !== userId) {
     throw new Error('Bạn không có quyền chỉnh sửa nhóm này.');
