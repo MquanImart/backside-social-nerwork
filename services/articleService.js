@@ -6,6 +6,7 @@ import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 import Group from '../models/Group.js'
 import { emitEvent } from '../sockets/socket.js'
+import { groupService } from '../services/groupServices.js'
 import mongoose from 'mongoose'
 import { getHobbySimilarity } from '../config/cosineSimilarity.js'
 
@@ -1178,7 +1179,7 @@ const approveReportService = async (reportId) => {
 
           // Delete the group if its warning level reaches 3
           if (group.warningLevel >= 3) {
-              await Group.findByIdAndUpdate(article.groupId, { _destroy: new Date() });
+              await groupService.lockGroupService(group._id);
           } 
           else {
               await group.save();
