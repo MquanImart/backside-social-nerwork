@@ -39,7 +39,10 @@ const groupSchema = new mongoose.Schema({
       },
     ],
   },
-  rule: [String],
+  rule: {
+    type: [String], // Mảng các quy định dạng chuỗi
+    default: [],    // Giá trị mặc định là mảng rỗng
+  },
   Administrators: [
     {
       idUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

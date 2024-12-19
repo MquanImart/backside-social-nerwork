@@ -64,8 +64,8 @@ const createGroup = async (req, res) => {
       return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin cần thiết.' });
     }
 
-    const hobbiesArray = Array.isArray(hobbies) ? hobbies : [hobbies];
-    const ruleArray = Array.isArray(rule) ? rule : [rule];
+    const hobbiesArray = Array.isArray(hobbies) ? hobbies.filter(hobby => hobby != null && hobby.trim() !== "") : [];
+    const ruleArray = Array.isArray(rule) ? rule.filter(r => r != null && r.trim() !== "") : [];
 
     const newGroup = await groupService.createGroupService({
       groupName,

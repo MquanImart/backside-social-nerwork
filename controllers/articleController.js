@@ -266,6 +266,12 @@ const shareArticle = async (req, res) => {
   const { postId } = req.params;
   const { content, scope, userId } = req.body; // Lấy nội dung, phạm vi và userId từ request body
 
+  if (content && checkBadWords(content).found) {
+    return res.status(400).json({
+      message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi cập nhật.',
+    });
+  }
+  
   try {
     // Gọi service để chia sẻ bài viết
     const sharedArticle = await articleService.shareArticleService({
@@ -348,24 +354,33 @@ const saveArticle = async (req, res) => {
 // Hàm chỉnh sửa bài viết
 const editArticle = async (req, res) => {
   try {
-    const { postId } = req.params
-    const { content, scope } = req.body
+    const { postId } = req.params;
+    const { content, scope } = req.body;
 
-    const updatedArticle = await articleService.editArticleService(
-      postId,
-      content,
-      scope
-    )
-    res
-      .status(200)
-      .json({ message: 'Chỉnh sửa bài viết thành công', post: updatedArticle })
+    // Kiểm tra nội dung nhạy cảm trước khi chỉnh sửa
+    if (content && checkBadWords(content).found) {
+      return res.status(400).json({
+        message: 'Nội dung bài viết chứa từ ngữ không phù hợp. Vui lòng chỉnh sửa trước khi cập nhật.',
+      });
+    }
+
+    // Gọi dịch vụ chỉnh sửa bài viết
+    const updatedArticle = await articleService.editArticleService(postId, content, scope);
+
+    // Phản hồi khi bài viết được chỉnh sửa thành công
+    res.status(200).json({
+      message: 'Chỉnh sửa bài viết thành công',
+      post: updatedArticle,
+    });
   } catch (error) {
-    console.error('Lỗi khi chỉnh sửa bài viết:', error)
-    res
-      .status(500)
-      .json({ message: 'Lỗi khi chỉnh sửa bài viết', error: error.message })
+    console.error('Lỗi khi chỉnh sửa bài viết:', error);
+    res.status(500).json({
+      message: 'Lỗi khi chỉnh sửa bài viết',
+      error: error.message,
+    });
   }
-}
+};
+
 
 // Hàm xử lý like comment
 const likeComment = async (req, res) => {

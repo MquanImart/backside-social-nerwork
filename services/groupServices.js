@@ -272,6 +272,9 @@ const getNotJoinedGroupsService = async (userId, page = 1, limit = 6, searchTerm
         };
       }),
     );
+
+    groupsWithSimilarityAndFriends.sort((a, b) => b.suggestionScore - a.suggestionScore);
+
     return {
       groups: groupsWithSimilarityAndFriends,
       pages, // Tổng số trang
@@ -292,6 +295,11 @@ const createGroupService = async ({
   hobbies,
   rule,
 }) => {
+  const existingGroup = await Group.findOne({ groupName: groupName.trim() });
+    if (existingGroup) {
+      throw new Error('Tên nhóm đã tồn tại. Vui lòng chọn tên khác.');
+    }
+    
   const newGroup = new Group({
     groupName,
     type,
