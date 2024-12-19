@@ -88,7 +88,7 @@ const checkCCCDService = async (cccdFile) => {
   } catch (error) {
     return {
       success: false,
-      message: 'Lỗi khi gọi API FPT.AI.',
+      message: 'Không nhận diện được thông tin từ CCCD.',
       error: error.message
     }
   }

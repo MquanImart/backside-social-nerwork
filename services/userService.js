@@ -295,10 +295,9 @@ const updateUser = async (userId, newData, avtUrl, backGroundUrl) => {
     }
     const user = await User.findById(userId);
 
-    if (newData.account && newData.account.password) {
-      const inputPassword = newData.account.password;
+    if (newData.account && newData.account.oldPassword) {
+      const inputPassword = newData.account.oldPassword;
       const storedPassword = user.account.password; 
-  
       const isMatch = await bcrypt.compare(inputPassword, storedPassword);
       if (!isMatch) {
         return {
@@ -360,7 +359,10 @@ const updateUser = async (userId, newData, avtUrl, backGroundUrl) => {
     // Nếu có thay đổi trong `account.password`, băm mật khẩu mới
     if (newData.account && newData.account.password) {
       const salt = await bcrypt.genSalt(10);
-      newData.account.password = await bcrypt.hash(newData.account.password, salt);
+      newData.account = {
+        email: newData.account.email,
+        password: await bcrypt.hash(newData.account.password, salt)
+      };
     }
 
     // Thêm ngày cập nhật
